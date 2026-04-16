@@ -24,7 +24,7 @@ interface Config {
 }
 
 function getConfigPath(): string | null {
-  // Priority: user's local config > OpenCode config > local project config > env vars
+  // Priority: user's local config > OpenCode/Claude Code config > local project config > env vars
   const candidates = [
     // User's own hybrid-agent config (highest priority)
     path.join(os.homedir(), '.hybrid-agent', 'config.json'),
@@ -39,6 +39,11 @@ function getConfigPath(): string | null {
     path.join(process.env.APPDATA || '', 'opencode', 'opencode.jsonc'),
     path.join(process.env.APPDATA || '', 'opencode', 'opencode.json'),
     path.join(process.env.APPDATA || '', 'opencode', 'config.json'),
+    // Claude Code user config (import if exists)
+    path.join(os.homedir(), '.claude', 'settings.json'),
+    // Claude Code Windows AppData
+    path.join(process.env.APPDATA || '', 'Claude', 'settings.json'),
+    path.join(process.env.LOCALAPPDATA || '', 'Claude', 'settings.json'),
     // Local project config
     path.join(process.cwd(), 'config.json'),
     path.join(process.cwd(), 'config.local.json'),
