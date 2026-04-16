@@ -23,38 +23,30 @@ interface Config {
   model: string
 }
 
-function getConfigPath(): string | null {
-  // Priority: user's local config > OpenCode/Claude Code config > local project config > env vars
+// 扫描所有可能的配置文件路径
+function scanConfigPaths(): string[] {
   const candidates = [
-    // User's own hybrid-agent config (highest priority)
+    // hybrid-agent
     path.join(os.homedir(), '.hybrid-agent', 'config.json'),
     path.join(os.homedir(), '.config', 'hybrid-agent', 'config.json'),
-    // Windows: AppData
     path.join(process.env.APPDATA || '', 'hybrid-agent', 'config.json'),
-    // OpenCode user config (import if exists)
+    // Claude Code
+    path.join(os.homedir(), '.claude', 'settings.json'),
+    path.join(process.env.APPDATA || '', 'Claude', 'settings.json'),
+    path.join(process.env.LOCALAPPDATA || '', 'Claude', 'settings.json'),
+    // OpenCode
     path.join(os.homedir(), '.config', 'opencode', 'opencode.jsonc'),
     path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
     path.join(os.homedir(), '.config', 'opencode', 'config.json'),
-    // OpenCode Windows AppData
     path.join(process.env.APPDATA || '', 'opencode', 'opencode.jsonc'),
     path.join(process.env.APPDATA || '', 'opencode', 'opencode.json'),
     path.join(process.env.APPDATA || '', 'opencode', 'config.json'),
-    // Claude Code user config (import if exists)
-    path.join(os.homedir(), '.claude', 'settings.json'),
-    // Claude Code Windows AppData
-    path.join(process.env.APPDATA || '', 'Claude', 'settings.json'),
-    path.join(process.env.LOCALAPPDATA || '', 'Claude', 'settings.json'),
-    // Local project config
+    // local
     path.join(process.cwd(), 'config.json'),
     path.join(process.cwd(), 'config.local.json'),
   ]
 
-  for (const configPath of candidates) {
-    if (existsSync(configPath)) {
-      return configPath
-    }
-  }
-  return null
+  return candidates.filter(p => existsSync(p))
 }
 
 /**
@@ -128,6 +120,7 @@ function importConfig(configPath: string, config: Config): Config {
   }
 }
 
+// 运行时配置（默认/用户选择的）
 let config: Config = {
   provider: 'minimaxi',
   baseUrl: 'https://api.minimaxi.com/anthropic',
@@ -135,12 +128,39 @@ let config: Config = {
   model: 'MiniMax-M2.7',
 }
 
-const configPath = getConfigPath()
-if (configPath) {
-  config = importConfig(configPath, config)
-  console.log(`Loaded config from: ${configPath}`)
-} else {
-  console.log('No config file found, using environment/defaults')
+// 导入的配置建议（不直接应用，需要用户确认）
+interface ConfigSuggestion {
+  source: string  // 'opencode' | 'claude' | 'hybrid-agent'
+  path: string
+  config: Partial<Config>
+}
+
+const configSuggestions: ConfigSuggestion[] = []
+
+// 扫描所有配置文件，hybrid-agent配置直接使用，其他配置作为建议
+for (const configPath of scanConfigPaths()) {
+  const imported = importConfig(configPath, config)
+  if (imported.apiKey) {
+    let source: 'hybrid-agent' | 'claude' | 'opencode' = 'hybrid-agent'
+    if (configPath.includes('.claude')) source = 'claude'
+    else if (configPath.includes('opencode')) source = 'opencode'
+
+    if (source === 'hybrid-agent') {
+      config = importConfig(configPath, config)
+      console.log(`Loaded hybrid-agent config from: ${configPath}`)
+    } else {
+      configSuggestions.push({
+        source,
+        path: configPath,
+        config: imported,
+      })
+      console.log(`Found ${source} config at: ${configPath} (as suggestion)`)
+    }
+  }
+}
+
+if (configSuggestions.length === 0 && !config.apiKey) {
+  console.log('No config found, using defaults (env vars)')
 }
 
 // ============================================================================
@@ -300,6 +320,46 @@ app.get('/api/info', (c) => c.json({
     hasApiKey: !!config.apiKey,
   },
 }))
+
+// ============================================================================
+// Config Suggestions Routes
+// ============================================================================
+
+// 获取配置建议（导入的配置文件）
+app.get('/api/config/suggestions', (c) => {
+  return c.json({
+    suggestions: configSuggestions,
+    current: {
+      provider: config.provider,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      hasApiKey: !!config.apiKey,
+    },
+  })
+})
+
+// 应用配置建议
+app.post('/api/config/apply', async (c) => {
+  const { source } = await c.req.json()
+  const suggestion = configSuggestions.find(s => s.source === source)
+  if (!suggestion) {
+    return c.json({ error: 'Suggestion not found' }, 404)
+  }
+  if (suggestion.config.provider) config.provider = suggestion.config.provider
+  if (suggestion.config.baseUrl) config.baseUrl = suggestion.config.baseUrl
+  if (suggestion.config.apiKey) config.apiKey = suggestion.config.apiKey
+  if (suggestion.config.model) config.model = suggestion.config.model
+
+  return c.json({
+    success: true,
+    config: {
+      provider: config.provider,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      hasApiKey: !!config.apiKey,
+    },
+  })
+})
 
 // ============================================================================
 // Provider Routes
@@ -522,7 +582,9 @@ app.post('/api/chat', async (c) => {
   }
 
   try {
-    const response = await fetch(`${config.baseUrl}/v1/messages`, {
+    // 避免baseUrl重复追加/v1
+    const baseUrl = config.baseUrl.replace(/\/v1$/, '')
+    const response = await fetch(`${baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -596,7 +658,9 @@ app.post('/api/chat', async (c) => {
 
 app.post('/api/debug-minimaxi', async (c) => {
   try {
-    const response = await fetch(`${config.baseUrl}/v1/messages`, {
+    // 避免baseUrl重复追加/v1
+    const baseUrl = config.baseUrl.replace(/\/v1$/, '')
+    const response = await fetch(`${baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
