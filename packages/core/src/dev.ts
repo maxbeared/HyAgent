@@ -1,8 +1,6 @@
 /**
  * Hybrid Agent - Development Entry Point
  *
- * 融合Claude Code安全特性与OpenCode架构
- *
  * Run with: pnpm dev
  */
 
@@ -10,6 +8,33 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { readFileSync } from 'fs'
+
+// ============================================================================
+// Load Config
+// ============================================================================
+
+interface Config {
+  provider: string
+  baseUrl: string
+  apiKey: string
+  model: string
+}
+
+let config: Config = {
+  provider: 'minimaxi',
+  baseUrl: 'https://api.minimaxi.com/anthropic',
+  apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+  model: 'MiniMax-M2.7',
+}
+
+try {
+  const configFile = readFileSync('./config.json', 'utf-8')
+  config = { ...config, ...JSON.parse(configFile) }
+  console.log('Loaded config from config.json')
+} catch {
+  console.log('Using default/config from environment')
+}
 
 // ============================================================================
 // App Setup
@@ -21,7 +46,7 @@ app.use('*', logger())
 app.use('*', cors())
 
 // ============================================================================
-// In-Memory Stores (placeholder for real storage)
+// In-Memory Stores
 // ============================================================================
 
 interface Session {
@@ -57,7 +82,11 @@ app.get('/health', (c) => c.json({
 app.get('/api/info', (c) => c.json({
   name: 'Hybrid Agent',
   version: '0.1.0',
-  description: 'AI coding agent combining Claude Code + OpenCode',
+  config: {
+    provider: config.provider,
+    model: config.model,
+    hasApiKey: !!config.apiKey,
+  },
 }))
 
 // ============================================================================
@@ -69,6 +98,7 @@ app.get('/api/providers', (c) => {
     { id: 'anthropic', name: 'Anthropic', models: ['claude-opus-4-6', 'claude-sonnet-4-6'] },
     { id: 'openai', name: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini'] },
     { id: 'google', name: 'Google', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] },
+    { id: 'minimaxi', name: 'MiniMax', models: [config.model] },
   ])
 })
 
@@ -87,12 +117,15 @@ app.get('/api/models', (c) => {
       { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', context: 1000000 },
       { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', context: 1000000 },
     ],
+    minimaxi: [
+      { id: config.model, name: 'MiniMax M2', context: 100000 },
+    ],
   }
   return c.json(models[provider] ?? [])
 })
 
 // ============================================================================
-// Permission Routes (Path Safety)
+// Permission Routes
 // ============================================================================
 
 app.post('/api/permission/check', async (c) => {
@@ -117,8 +150,8 @@ app.post('/api/sessions', async (c) => {
   const session: Session = {
     id,
     messages: [],
-    model: body.model ?? 'claude-sonnet-4-6',
-    provider: body.provider ?? 'anthropic',
+    model: body.model ?? config.model,
+    provider: body.provider ?? config.provider,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -126,31 +159,24 @@ app.post('/api/sessions', async (c) => {
   return c.json(session, 201)
 })
 
-app.get('/api/sessions', (c) => {
-  return c.json(Array.from(sessions.values()))
-})
+app.get('/api/sessions', (c) => c.json(Array.from(sessions.values())))
 
 app.get('/api/sessions/:id', (c) => {
   const id = c.req.param('id')
   const session = sessions.get(id)
-  if (!session) {
-    return c.json({ error: 'Session not found' }, 404)
-  }
+  if (!session) return c.json({ error: 'Session not found' }, 404)
   return c.json(session)
 })
 
 app.delete('/api/sessions/:id', (c) => {
-  const id = c.req.param('id')
-  sessions.delete(id)
+  sessions.delete(c.req.param('id'))
   return c.json({ success: true })
 })
 
 app.post('/api/sessions/:id/messages', async (c) => {
   const id = c.req.param('id')
   const session = sessions.get(id)
-  if (!session) {
-    return c.json({ error: 'Session not found' }, 404)
-  }
+  if (!session) return c.json({ error: 'Session not found' }, 404)
 
   const body = await c.req.json()
   const message = {
@@ -163,16 +189,12 @@ app.post('/api/sessions/:id/messages', async (c) => {
 
   session.messages.push(message)
   session.updatedAt = Date.now()
-
   return c.json(message, 201)
 })
 
 app.get('/api/sessions/:id/messages', (c) => {
-  const id = c.req.param('id')
-  const session = sessions.get(id)
-  if (!session) {
-    return c.json({ error: 'Session not found' }, 404)
-  }
+  const session = sessions.get(c.req.param('id'))
+  if (!session) return c.json({ error: 'Session not found' }, 404)
   return c.json(session.messages)
 })
 
@@ -182,30 +204,16 @@ app.get('/api/sessions/:id/messages', (c) => {
 
 app.post('/api/tools/execute', async (c) => {
   const { tool, input } = await c.req.json()
-
   try {
     let result: any
-
     switch (tool) {
-      case 'bash':
-        result = await executeBash(input.command, input)
-        break
-      case 'read':
-        result = await executeRead(input.path, input)
-        break
-      case 'edit':
-        result = await executeEdit(input.path, input.oldString, input.newString)
-        break
-      case 'glob':
-        result = await executeGlob(input.pattern, input)
-        break
-      case 'grep':
-        result = await executeGrep(input.pattern, input)
-        break
-      default:
-        return c.json({ error: `Unknown tool: ${tool}` }, 400)
+      case 'bash': result = await executeBash(input.command, input); break
+      case 'read': result = await executeRead(input.path, input); break
+      case 'edit': result = await executeEdit(input.path, input.oldString, input.newString); break
+      case 'glob': result = await executeGlob(input.pattern, input); break
+      case 'grep': result = await executeGrep(input.pattern, input); break
+      default: return c.json({ error: `Unknown tool: ${tool}` }, 400)
     }
-
     return c.json(result)
   } catch (error: any) {
     return c.json({ error: error.message }, 500)
@@ -219,15 +227,9 @@ app.post('/api/tools/execute', async (c) => {
 app.post('/api/coordinator/spawn', async (c) => {
   const body = await c.req.json()
   const id = `worker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-
-  const worker: Worker = {
-    id,
-    name: body.name ?? 'worker',
-    status: 'pending',
-  }
+  const worker: Worker = { id, name: body.name ?? 'worker', status: 'pending' }
   workers.set(id, worker)
 
-  // Simulate async work
   setTimeout(() => {
     worker.status = 'running'
     setTimeout(() => {
@@ -239,96 +241,173 @@ app.post('/api/coordinator/spawn', async (c) => {
   return c.json({ workerId: id, status: 'pending' }, 201)
 })
 
-app.get('/api/coordinator/workers', (c) => {
-  return c.json(Array.from(workers.values()))
-})
+app.get('/api/coordinator/workers', (c) => c.json(Array.from(workers.values())))
 
 app.get('/api/coordinator/workers/:id', (c) => {
-  const id = c.req.param('id')
-  const worker = workers.get(id)
-  if (!worker) {
-    return c.json({ error: 'Worker not found' }, 404)
-  }
+  const worker = workers.get(c.req.param('id'))
+  if (!worker) return c.json({ error: 'Worker not found' }, 404)
   return c.json(worker)
 })
 
 app.post('/api/coordinator/workers/:id/send', async (c) => {
-  const id = c.req.param('id')
-  const { message } = await c.req.json()
-  const worker = workers.get(id)
-  if (!worker) {
-    return c.json({ error: 'Worker not found' }, 404)
-  }
-  return c.json({ success: true, message })
+  const worker = workers.get(c.req.param('id'))
+  if (!worker) return c.json({ error: 'Worker not found' }, 404)
+  return c.json({ success: true })
 })
 
 app.post('/api/coordinator/workers/:id/kill', (c) => {
-  const id = c.req.param('id')
-  const worker = workers.get(id)
-  if (!worker) {
-    return c.json({ error: 'Worker not found' }, 404)
-  }
-  worker.status = 'failed'
+  const worker = workers.get(c.req.param('id'))
+  if (worker) worker.status = 'failed'
   return c.json({ success: true })
 })
 
 // ============================================================================
-// Chat Completion (Simplified)
+// Chat Completion (Real API - MiniMax)
 // ============================================================================
 
 app.post('/api/chat', async (c) => {
   const body = await c.req.json()
   const { sessionId, messages, model, provider } = body
 
-  // Simulated response
-  const response = {
-    id: `msg_${Date.now()}`,
-    role: 'assistant',
-    content: `[Simulated response from ${provider}/${model}]\n\nThis is a placeholder response. In production, this would call the actual AI provider.`,
-    timestamp: Date.now(),
+  const targetModel = model ?? config.model
+
+  // Build messages for API
+  const apiMessages = (messages ?? []).map((m: any) => ({
+    role: m.role,
+    content: typeof m.content === 'string' ? m.content : m.content?.[0]?.text ?? '',
+  }))
+
+  // Add system prompt if first message is not system
+  if (apiMessages.length > 0 && apiMessages[0].role !== 'system') {
+    apiMessages.unshift({
+      role: 'system',
+      content: 'You are a helpful AI coding assistant.',
+    })
   }
 
-  // Add to session if provided
-  if (sessionId) {
-    const session = sessions.get(sessionId)
-    if (session) {
-      session.messages.push(response)
-      session.updatedAt = Date.now()
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        max_tokens: 4096,
+        messages: apiMessages,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return c.json({
+        error: `API Error: ${response.status}`,
+        details: errorText,
+      })
     }
-  }
 
-  return c.json({
-    message: response,
-    usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-  })
+    const data = await response.json() as any
+
+    // Extract content - MiniMax uses content array with different types
+    let content = 'No response'
+    if (data.content && Array.isArray(data.content)) {
+      // Find the first text type content
+      const textContent = data.content.find((c: any) => c.type === 'text')
+      if (textContent?.text) {
+        content = textContent.text
+      } else if (data.content.length > 0 && data.content[0].type === 'thinking') {
+        // No text response, only thinking - response may be truncated
+        content = '[Thinking only - response may be truncated]'
+      }
+    } else if (data.result) {
+      content = typeof data.result === 'string' ? data.result : data.result.text ?? 'No response'
+    } else if (data.message?.content) {
+      content = data.message.content
+    } else if (typeof data === 'string') {
+      content = data
+    }
+
+    const assistantMessage = {
+      id: `msg_${Date.now()}`,
+      role: 'assistant',
+      content,
+      timestamp: Date.now(),
+    }
+
+    if (sessionId) {
+      const session = sessions.get(sessionId)
+      if (session) {
+        session.messages.push(assistantMessage)
+        session.updatedAt = Date.now()
+      }
+    }
+
+    return c.json({
+      message: assistantMessage,
+      usage: data.usage ?? { inputTokens: 0, outputTokens: 0 },
+    })
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
 })
 
 // ============================================================================
-// Path Safety Functions (from Claude Code)
+// Debug: Raw API Test
+// ============================================================================
+
+app.post('/api/debug-minimaxi', async (c) => {
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: 100,
+        messages: [{ role: 'user', content: 'Say exactly: Hi' }],
+      }),
+    })
+
+    const text = await response.text()
+    let json: any
+    try { json = JSON.parse(text) } catch { json = { raw: text } }
+
+    return c.json({
+      status: response.status,
+      ok: response.ok,
+      body: json,
+    })
+  } catch (error: any) {
+    return c.json({ error: error.message })
+  }
+})
+
+// ============================================================================
+// Path Safety Functions
 // ============================================================================
 
 function checkPathSafety(path: string): { isSafe: boolean; reason?: string; pathType: string } {
-  // UNC path check
   if (path.startsWith('\\\\') || path.startsWith('//')) {
     return { isSafe: false, reason: 'UNC paths blocked', pathType: 'blocked' }
   }
 
-  // Device path check
-  const blockedDevicePaths = [
-    '/dev/zero', '/dev/random', '/dev/urandom', '/dev/stdin',
-    '/dev/tty', '/dev/stdout', '/dev/stderr',
-  ]
+  const blockedDevicePaths = ['/dev/zero', '/dev/random', '/dev/urandom', '/dev/stdin', '/dev/tty', '/dev/stdout', '/dev/stderr']
   if (blockedDevicePaths.includes(path)) {
     return { isSafe: false, reason: 'Device paths blocked', pathType: 'blocked' }
   }
 
-  // Path traversal check
   const normalized = path.replace(/\\/g, '/')
   if (normalized.includes('../') || normalized.includes('..\\')) {
     return { isSafe: false, reason: 'Path traversal blocked', pathType: 'dangerous' }
   }
 
-  // Protected paths
   const protectedPatterns = [/\.git\//, /\.claude\//, /\.ssh\//, /\.aws\//]
   for (const pattern of protectedPatterns) {
     if (pattern.test(path)) {
@@ -341,8 +420,6 @@ function checkPathSafety(path: string): { isSafe: boolean; reason?: string; path
 
 function checkCommandSafety(command: string): { isSafe: boolean; reasons: string[] } {
   const reasons: string[] = []
-
-  // Check for dangerous commands
   const dangerousPatterns = [
     { pattern: /rm\s+-rf\s+\//, reason: 'Root delete command' },
     { pattern: /dd\s+if=.*of=\/dev\//, reason: 'Disk dump to device' },
@@ -350,21 +427,16 @@ function checkCommandSafety(command: string): { isSafe: boolean; reasons: string
   ]
 
   for (const { pattern, reason } of dangerousPatterns) {
-    if (pattern.test(command)) {
-      reasons.push(reason)
-    }
+    if (pattern.test(command)) reasons.push(reason)
   }
 
-  // Extract and check paths
   const pathRegex = /(['"])([^\1]+?)\1|([\.\/\~a-zA-Z0-9_\-@\/\*][^\s\\]*)/g
   let match
   while ((match = pathRegex.exec(command)) !== null) {
     const path = match[2] ?? match[3]
     if (path && !path.startsWith('-')) {
       const safety = checkPathSafety(path)
-      if (!safety.isSafe && safety.reason) {
-        reasons.push(`${path}: ${safety.reason}`)
-      }
+      if (!safety.isSafe && safety.reason) reasons.push(`${path}: ${safety.reason}`)
     }
   }
 
@@ -377,70 +449,42 @@ function checkCommandSafety(command: string): { isSafe: boolean; reasons: string
 
 async function executeBash(command: string, input: any): Promise<any> {
   const { spawn } = await import('child_process')
-
-  // Safety check
   const safety = checkCommandSafety(command)
   if (!safety.isSafe) {
-    return {
-      success: false,
-      title: 'Command Blocked',
-      output: `Safety check failed:\n${safety.reasons.join('\n')}`,
-    }
+    return { success: false, title: 'Command Blocked', output: `Safety check failed:\n${safety.reasons.join('\n')}` }
   }
 
   return new Promise((resolve) => {
     const isWindows = process.platform === 'win32'
     const shell = isWindows ? 'cmd.exe' : '/bin/bash'
     const args = isWindows ? ['/c', command] : ['-c', command]
-
     const proc = spawn(shell, args, { cwd: input.cwd ?? process.cwd() })
-    let stdout = ''
-    let stderr = ''
+    let stdout = '', stderr = ''
 
     proc.stdout?.on('data', (data: Buffer) => { stdout += data.toString() })
     proc.stderr?.on('data', (data: Buffer) => { stderr += data.toString() })
 
     const timeout = setTimeout(() => {
       proc.kill()
-      resolve({
-        success: false,
-        title: 'Bash (timeout)',
-        output: 'Command timed out',
-      })
+      resolve({ success: false, title: 'Bash (timeout)', output: 'Command timed out' })
     }, input.timeout ?? 30000)
 
     proc.on('close', (code) => {
       clearTimeout(timeout)
-      resolve({
-        success: code === 0,
-        title: `Bash: ${command.slice(0, 50)}...`,
-        output: stdout + (stderr ? `\n[stderr]${stderr}` : ''),
-        exitCode: code,
-      })
+      resolve({ success: code === 0, title: `Bash: ${command.slice(0, 50)}...`, output: stdout + (stderr ? `\n[stderr]${stderr}` : ''), exitCode: code })
     })
 
     proc.on('error', (err) => {
       clearTimeout(timeout)
-      resolve({
-        success: false,
-        title: 'Bash (error)',
-        output: err.message,
-      })
+      resolve({ success: false, title: 'Bash (error)', output: err.message })
     })
   })
 }
 
 async function executeRead(path: string, input: any): Promise<any> {
   const fs = await import('fs/promises')
-
   const safety = checkPathSafety(path)
-  if (!safety.isSafe) {
-    return {
-      success: false,
-      title: 'Read Blocked',
-      output: safety.reason ?? 'Path not allowed',
-    }
-  }
+  if (!safety.isSafe) return { success: false, title: 'Read Blocked', output: safety.reason }
 
   try {
     const content = await fs.readFile(path, 'utf-8')
@@ -448,104 +492,46 @@ async function executeRead(path: string, input: any): Promise<any> {
     const offset = input.offset ?? 0
     const limit = input.limit ?? lines.length
     const sliced = lines.slice(offset, offset + limit).join('\n')
-
-    return {
-      success: true,
-      title: `Read: ${path}`,
-      output: sliced + (offset + limit < lines.length ? `\n... (${lines.length - offset - limit} more lines)` : ''),
-      lines: limit,
-      totalLines: lines.length,
-    }
+    return { success: true, title: `Read: ${path}`, output: sliced + (offset + limit < lines.length ? `\n... (${lines.length - offset - limit} more lines)` : ''), lines: limit, totalLines: lines.length }
   } catch (err: any) {
-    return {
-      success: false,
-      title: `Read: ${path}`,
-      output: err.message,
-    }
+    return { success: false, title: `Read: ${path}`, output: err.message }
   }
 }
 
 async function executeEdit(path: string, oldString: string, newString: string): Promise<any> {
   const fs = await import('fs/promises')
-
   const safety = checkPathSafety(path)
-  if (!safety.isSafe) {
-    return {
-      success: false,
-      title: 'Edit Blocked',
-      output: safety.reason ?? 'Path not allowed',
-    }
-  }
+  if (!safety.isSafe) return { success: false, title: 'Edit Blocked', output: safety.reason }
 
   try {
     const content = await fs.readFile(path, 'utf-8')
-    if (!content.includes(oldString)) {
-      return {
-        success: false,
-        title: `Edit: ${path}`,
-        output: 'Text to replace not found',
-      }
-    }
-    const newContent = content.replace(oldString, newString)
-    await fs.writeFile(path, newContent, 'utf-8')
-    return {
-      success: true,
-      title: `Edit: ${path}`,
-      output: 'File edited successfully',
-    }
+    if (!content.includes(oldString)) return { success: false, title: `Edit: ${path}`, output: 'Text to replace not found' }
+    await fs.writeFile(path, content.replace(oldString, newString), 'utf-8')
+    return { success: true, title: `Edit: ${path}`, output: 'File edited successfully' }
   } catch (err: any) {
-    return {
-      success: false,
-      title: `Edit: ${path}`,
-      output: err.message,
-    }
+    return { success: false, title: `Edit: ${path}`, output: err.message }
   }
 }
 
 async function executeGlob(pattern: string, input: any): Promise<any> {
   const { glob } = await import('glob')
-  const cwd = input.cwd ?? process.cwd()
-
   try {
-    const files = await glob(pattern, { cwd, absolute: true })
-    return {
-      success: true,
-      title: `Glob: ${pattern}`,
-      output: files.join('\n'),
-      count: files.length,
-    }
+    const files = await glob(pattern, { cwd: input.cwd ?? process.cwd(), absolute: true })
+    return { success: true, title: `Glob: ${pattern}`, output: files.join('\n'), count: files.length }
   } catch (err: any) {
-    return {
-      success: false,
-      title: `Glob: ${pattern}`,
-      output: err.message,
-    }
+    return { success: false, title: `Glob: ${pattern}`, output: err.message }
   }
 }
 
 async function executeGrep(pattern: string, input: any): Promise<any> {
   const fs = await import('fs/promises')
-  const path = input.path ?? '.'
-
   try {
-    const content = await fs.readFile(path, 'utf-8')
+    const content = await fs.readFile(input.path ?? '.', 'utf-8')
     const lines = content.split('\n')
-    const matches = lines
-      .map((line, i) => ({ line, num: i + 1 }))
-      .filter(({ line }) => line.includes(pattern))
-
-    return {
-      success: true,
-      title: `Grep: ${pattern} in ${path}`,
-      output: matches.map(({ line, num }) => `${num}: ${line}`).join('\n'),
-      count: matches.length,
-    }
+    const matches = lines.map((line, i) => ({ line, num: i + 1 })).filter(({ line }) => line.includes(pattern))
+    return { success: true, title: `Grep: ${pattern} in ${input.path ?? '.'}`, output: matches.map(({ line, num }) => `${num}: ${line}`).join('\n'), count: matches.length }
   } catch (err: any) {
-    return {
-      success: false,
-      title: `Grep: ${pattern}`,
-      output: err.message,
-    }
+    return { success: false, title: `Grep: ${pattern}`, output: err.message }
   }
 }
 
@@ -562,13 +548,10 @@ console.log(`
 ║     Claude Code + OpenCode Architecture                       ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Server:  http://${HOST}:${PORT}                              ║
-║  Health:  http://${HOST}:${PORT}/health                        ║
-║  API:     http://${HOST}:${PORT}/api                           ║
+║  Provider: ${config.provider}                                   ║
+║  Model:   ${config.model}                                       ║
+║  API Key: ${config.apiKey ? '***' + config.apiKey.slice(-8) : 'NOT SET'}     ║
 ╚══════════════════════════════════════════════════════════════╝
 `)
 
-serve({
-  fetch: app.fetch,
-  port: PORT,
-  hostname: HOST,
-})
+serve({ fetch: app.fetch, port: PORT, hostname: HOST })

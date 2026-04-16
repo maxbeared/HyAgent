@@ -13,6 +13,11 @@ build/
 .env.local
 .env.*.local
 
+# Local config (contains API keys)
+config.json
+config.local.json
+*.local.json
+
 # IDE
 .idea/
 .vscode/

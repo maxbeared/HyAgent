@@ -87,12 +87,31 @@ Hono服务端。
 # 安装依赖
 pnpm install
 
+# 配置 (创建config.json)
+cp config.json.example config.json
+# 编辑config.json填入你的API key
+
 # 开发模式
 pnpm dev
 
 # 构建
 pnpm build
 ```
+
+## 配置文件
+
+本地配置文件 `config.json` 包含敏感信息，**不要提交到git**：
+
+```json
+{
+  "provider": "minimaxi",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "apiKey": "your-api-key-here",
+  "model": "MiniMax-M2.7"
+}
+```
+
+配置来源优先级：config.json > 环境变量
 
 ## 架构原则
 
