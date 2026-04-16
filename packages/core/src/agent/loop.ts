@@ -6,7 +6,7 @@
  * 2. Parse response: text blocks + tool_use blocks
  * 3. If stop_reason == 'end_turn' → task complete
  * 4. If stop_reason == 'tool_use' → execute tools concurrently, append results, loop
- * 5. Doom loop detection: if tool-only iterations exceed threshold → abort
+ * 5. Doom loop detection: exact same tool+input repeated N times → abort
  * 6. Token budget tracking: trigger compaction before hitting context limit
  * 7. Max iterations guard
  *
@@ -17,13 +17,16 @@
 
 import { TOOL_DEFINITIONS, executeToolCallsConcurrently } from './tools.js'
 import { compactMessages, shouldCompact, type Message } from './compaction.js'
+import { detectDoomLoop, hasSubstantialText } from './doomDetect.js'
+import { saveCheckpoint } from './checkpoint.js'
 
-// How many times a DUPLICATE tool call fingerprint must appear before we abort.
-// Duplicate = same tool name + same key input args, appearing back-to-back.
-const DOOM_LOOP_DUPLICATE_THRESHOLD = 2
+// How many consecutive identical tool calls trigger doom loop detection
+const DOOM_LOOP_THRESHOLD = 3
+
 // Hard cap: abort if we've been in tool-only mode for this many turns straight
-// (guards against long chains of diverse-but-never-finishing tool calls).
+// (safety net for diverse-but-never-finishing tool call chains)
 const DOOM_LOOP_MAX_TOOL_ONLY_TURNS = 10
+
 const SYSTEM_PROMPT = `You are a highly capable AI coding assistant that can autonomously complete complex software development tasks.
 
 You have access to tools to:
@@ -38,6 +41,31 @@ Guidelines:
 - When deploying, prefer local dev server (e.g., npm run dev) unless specifically asked for production deploy
 - Report clearly when the task is complete with a summary of what was done
 - If a step fails, diagnose and fix before moving on`
+
+// ---- Stop Reason Types ----
+
+export type StopReason =
+  | 'completed'              // Task completed normally
+  | 'end_turn'               // LLM ended turn without tool calls
+  | 'max_turns'              // Reached max_turns limit
+  | 'max_iterations'         // Reached max_iterations limit
+  | 'doom_loop_detected'     // Exact same tool+input repeated N times
+  | 'consecutive_tool_only'  // Too many consecutive tool-only turns
+  | 'token_budget_exceeded'  // Token budget would exceed limit
+  | 'tool_execution_error'   // Tool execution failed
+  | 'api_error'              // API returned error
+
+export interface StopDetail {
+  reason: StopReason
+  maxTurns?: number
+  actualTurns?: number
+  maxIterations?: number
+  actualIterations?: number
+  doomFingerprint?: string
+  toolName?: string
+  lastError?: string
+  totalTokens?: number
+}
 
 export interface AgentConfig {
   baseUrl: string
@@ -56,6 +84,8 @@ export interface AgentStreamEvent {
   iterations?: number
   totalTokens?: number
   error?: string
+  stopReason?: StopReason
+  stopDetail?: StopDetail
 }
 
 export interface AgentResult {
@@ -63,9 +93,11 @@ export interface AgentResult {
   iterations: number
   totalInputTokens: number
   totalOutputTokens: number
+  toolsUsed: number
   success: boolean
+  stopReason: StopReason
+  stopDetail?: StopDetail
   error?: string
-  stopReason?: string
 }
 
 // Retryable HTTP status codes (transient server-side errors)
@@ -137,12 +169,15 @@ async function callLLM(
  * @param cfg          - Agent config (baseUrl, apiKey, model)
  * @param maxIterations - Max loop iterations (default 30)
  * @param initialMessages - Existing conversation history (for continuing a chat session)
+ * @param maxTurns     - Optional max turns (for stop_reason reporting)
  */
 export async function* runAgentLoopStream(
   task: string,
   cfg: AgentConfig,
   maxIterations = 30,
   initialMessages?: Message[],
+  maxTurns?: number,
+  sessionId?: string,
 ): AsyncGenerator<AgentStreamEvent> {
   // Start with existing history if provided, otherwise start fresh
   const messages: Message[] = initialMessages
@@ -152,8 +187,8 @@ export async function* runAgentLoopStream(
   let iterations = 0
   let totalInputTokens = 0
   let totalOutputTokens = 0
-  let consecutiveToolOnlyTurns = 0   // Hard cap counter
-  let lastToolFingerprint = ''        // Fingerprint of last tool call set
+  let consecutiveToolOnlyTurns = 0   // Hard cap counter (safety net)
+  let toolsUsed = 0
 
   while (iterations < maxIterations) {
     iterations++
@@ -163,7 +198,13 @@ export async function* runAgentLoopStream(
     try {
       data = await callLLM(messages, cfg)
     } catch (e: any) {
-      yield { type: 'error', error: e.message, iterations }
+      yield {
+        type: 'error',
+        error: e.message,
+        iterations,
+        stopReason: 'api_error',
+        stopDetail: { reason: 'api_error', lastError: e.message },
+      }
       return
     }
 
@@ -185,53 +226,71 @@ export async function* runAgentLoopStream(
     }
 
     // ---- Check stop reason ----
+    // Note: stop_reason === 'tool_use' is unreliable — it's not always set correctly.
+    // We use our own logic based on whether tool_use blocks exist.
     const stopReason: string = data.stop_reason ?? 'end_turn'
 
     if (stopReason === 'end_turn' || toolUseBlocks.length === 0) {
       // Task complete
       const finalText = textBlocks.map((b: any) => b.text).join('\n').trim()
+      const actualMaxTurns = maxTurns ?? maxIterations
       yield {
         type: 'done',
         content: finalText,
         iterations,
         totalTokens,
         success: true,
+        stopReason: 'completed',
+        stopDetail: {
+          reason: 'completed',
+          actualTurns: iterations,
+          maxTurns: actualMaxTurns,
+        },
       }
       return
     }
 
-    // ---- Doom loop detection ----
-    // Strategy 1: detect duplicate tool call fingerprints (agent repeating itself)
-    // Strategy 2: hard cap on consecutive tool-only turns (safety net)
-    const fingerprint = toolUseBlocks
-      .map((b: any) => `${b.name}:${JSON.stringify(b.input ?? {})}`)
-      .sort()
-      .join('|')
+    // ---- Doom loop detection (OpenCode-style exact match) ----
+    // Check last DOOM_LOOP_THRESHOLD messages for exact same tool+input
+    const doomResult = detectDoomLoop(messages, DOOM_LOOP_THRESHOLD)
 
-    const isDuplicate = fingerprint === lastToolFingerprint
-    lastToolFingerprint = fingerprint
+    if (doomResult.isDoomLoop) {
+      yield {
+        type: 'error',
+        error: `Doom loop detected: ${doomResult.toolName} called with identical input ${DOOM_LOOP_THRESHOLD} times. Aborting.`,
+        iterations,
+        stopReason: 'doom_loop_detected',
+        stopDetail: {
+          reason: 'doom_loop_detected',
+          doomFingerprint: doomResult.fingerprint,
+          toolName: doomResult.toolName,
+          actualIterations: iterations,
+        },
+      }
+      return
+    }
 
-    const hasSubstantialText = textBlocks.some((b: any) => b.text?.trim().length > 30)
-    if (hasSubstantialText) {
+    // Safety net: hard cap on consecutive tool-only turns
+    const messageHasSubstantialText = hasSubstantialText(
+      blocks.some((b: any) => b.type === 'text') ? blocks : null,
+    )
+    if (messageHasSubstantialText) {
       consecutiveToolOnlyTurns = 0
     } else {
       consecutiveToolOnlyTurns++
     }
 
-    if (isDuplicate) {
-      yield {
-        type: 'error',
-        error: `Doom loop: agent is repeating the same tool calls (${fingerprint.slice(0, 100)}). Aborting.`,
-        iterations,
-      }
-      return
-    }
-
     if (consecutiveToolOnlyTurns >= DOOM_LOOP_MAX_TOOL_ONLY_TURNS) {
       yield {
         type: 'error',
-        error: `Doom loop: ${DOOM_LOOP_MAX_TOOL_ONLY_TURNS} consecutive tool-only iterations without progress.`,
+        error: `Doom loop: ${DOOM_LOOP_MAX_TOOL_ONLY_TURNS} consecutive tool-only iterations without substantial progress.`,
         iterations,
+        stopReason: 'consecutive_tool_only',
+        stopDetail: {
+          reason: 'consecutive_tool_only',
+          actualIterations: consecutiveToolOnlyTurns,
+          maxIterations: DOOM_LOOP_MAX_TOOL_ONLY_TURNS,
+        },
       }
       return
     }
@@ -255,6 +314,10 @@ export async function* runAgentLoopStream(
     }
 
     const results = await executeToolCallsConcurrently(toolCalls)
+    toolsUsed += results.length
+
+    // Check for tool execution errors
+    const hasErrors = results.some(r => !r.result.success)
 
     // Build tool_result user message
     const toolResultContent = results.map(r => ({
@@ -277,23 +340,64 @@ export async function* runAgentLoopStream(
       }
     }
 
+    // If all tools failed, abort with error
+    if (hasErrors && results.length > 0) {
+      yield {
+        type: 'error',
+        error: `Tool execution failed: ${results.filter(r => !r.result.success).map(r => r.name).join(', ')}`,
+        iterations,
+        stopReason: 'tool_execution_error',
+        stopDetail: {
+          reason: 'tool_execution_error',
+          lastError: results.find(r => !r.result.success)?.result.output,
+          actualIterations: iterations,
+        },
+      }
+      return
+    }
+
     // ---- Session compaction ----
     if (shouldCompact(totalTokens)) {
-      yield { type: 'compaction', content: `Compacting session (${totalTokens} tokens used)...` }
+      yield {
+        type: 'compaction',
+        content: `Compacting session (${totalTokens} tokens used)...`,
+        totalTokens,
+        stopReason: 'token_budget_exceeded',
+        stopDetail: {
+          reason: 'token_budget_exceeded',
+        },
+      }
       const compacted = await compactMessages(messages, cfg)
       messages.length = 0
       messages.push(...compacted)
       totalInputTokens = 0
       totalOutputTokens = 0
       consecutiveToolOnlyTurns = 0
-      lastToolFingerprint = ''
     }
+
+    // ---- Save checkpoint for session recovery ----
+    saveCheckpoint(
+      sessionId ?? `task_${Date.now()}`,
+      task,
+      messages,
+      iterations,
+      totalInputTokens,
+      totalOutputTokens,
+      consecutiveToolOnlyTurns,
+    )
   }
 
+  // Max iterations reached
   yield {
     type: 'error',
     error: `Max iterations (${maxIterations}) reached without completing the task.`,
     iterations,
+    stopReason: 'max_iterations',
+    stopDetail: {
+      reason: 'max_iterations',
+      actualIterations: iterations,
+      maxIterations,
+    },
   }
 }
 
@@ -306,11 +410,13 @@ export async function runAgentLoop(
   cfg: AgentConfig,
   maxIterations = 30,
   initialMessages?: Message[],
+  maxTurns?: number,
+  sessionId?: string,
 ): Promise<AgentResult> {
   const textParts: string[] = []
   let lastEvent: AgentStreamEvent | null = null
 
-  for await (const event of runAgentLoopStream(task, cfg, maxIterations, initialMessages)) {
+  for await (const event of runAgentLoopStream(task, cfg, maxIterations, initialMessages, maxTurns, sessionId)) {
     lastEvent = event
     if (event.type === 'text' && event.content) {
       textParts.push(event.content)
@@ -334,7 +440,10 @@ export async function runAgentLoop(
     iterations: lastEvent?.iterations ?? 0,
     totalInputTokens: 0,
     totalOutputTokens: 0,
+    toolsUsed: 0,
     success: isDone,
+    stopReason: lastEvent?.stopReason ?? (isDone ? 'completed' : 'max_iterations'),
+    stopDetail: lastEvent?.stopDetail,
     error: isDone ? undefined : lastEvent?.error,
   }
 }

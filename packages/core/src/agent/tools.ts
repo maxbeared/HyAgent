@@ -15,9 +15,19 @@ import { checkCommandSafety, checkPathSafety } from '../permission.js'
 
 const execAsync = promisify(exec)
 
+// Max characters to retain from tool output (prevents context overflow from large files)
+const MAX_TOOL_OUTPUT = 8_000
+
 export interface ToolResult {
   output: string
   success: boolean
+  truncated?: boolean
+}
+
+function truncateOutput(output: string): string {
+  if (output.length <= MAX_TOOL_OUTPUT) return output
+  return output.slice(0, MAX_TOOL_OUTPUT) +
+    `\n... [truncated ${output.length - MAX_TOOL_OUTPUT} chars]`
 }
 
 // Tools that are safe to run concurrently (read-only operations)
@@ -115,10 +125,11 @@ async function executeBash(input: { command: string; cwd?: string; timeout?: num
       maxBuffer: 10 * 1024 * 1024, // 10MB
     })
     const output = [stdout, stderr].filter(Boolean).join('\n').trim()
-    return { output: output || '(no output)', success: true }
+    const truncated = output.length > MAX_TOOL_OUTPUT
+    return { output: truncateOutput(output), success: true, truncated }
   } catch (e: any) {
     const output = [e.stdout, e.stderr, e.message].filter(Boolean).join('\n').trim()
-    return { output: output || e.message, success: false }
+    return { output: truncateOutput(output) || e.message, success: false }
   }
 }
 
@@ -133,7 +144,9 @@ async function executeRead(input: { path: string; offset?: number; limit?: numbe
     const offset = input.offset ?? 0
     const limit = input.limit ?? lines.length
     const selected = lines.slice(offset, offset + limit)
-    return { output: selected.join('\n'), success: true }
+    const output = selected.join('\n')
+    const truncated = output.length > MAX_TOOL_OUTPUT
+    return { output: truncateOutput(output), success: true, truncated }
   } catch (e: any) {
     return { output: e.message, success: false }
   }
@@ -179,7 +192,9 @@ async function executeGlob(input: { pattern: string; cwd?: string }): Promise<To
       absolute: false,
     })
     if (matches.length === 0) return { output: 'No files found', success: true }
-    return { output: matches.join('\n'), success: true }
+    const output = matches.join('\n')
+    const truncated = output.length > MAX_TOOL_OUTPUT
+    return { output: truncateOutput(output), success: true, truncated }
   } catch (e: any) {
     return { output: e.message, success: false }
   }
@@ -196,7 +211,9 @@ async function executeGrep(input: { pattern: string; path?: string; include?: st
     const includeFlag = input.include ? `--include="${input.include}"` : ''
     const cmd = `grep -rn ${includeFlag} "${input.pattern.replace(/"/g, '\\"')}" "${searchPath}" 2>/dev/null || true`
     const { stdout } = await execAsync(cmd, { timeout: 10000, maxBuffer: 5 * 1024 * 1024 })
-    return { output: stdout.trim() || 'No matches found', success: true }
+    const output = stdout.trim() || 'No matches found'
+    const truncated = output.length > MAX_TOOL_OUTPUT
+    return { output: truncateOutput(output), success: true, truncated }
   } catch (e: any) {
     return { output: e.message, success: false }
   }

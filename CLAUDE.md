@@ -22,10 +22,13 @@ packages/core/src/
 ├── dev.ts              # 入口（~30行），启动 Hono 服务
 ├── config.ts           # 配置加载：扫描 hybrid-agent/Claude/OpenCode 配置文件
 ├── permission.ts       # 路径/命令安全检查（借鉴 Claude Code pathValidation）
-├── server.ts           # Hono HTTP 路由（~250行）
+├── server.ts           # Hono HTTP 路由（~500行）
+├── repl.ts             # CLI REPL 工具（与 agent 交互的终端界面）
 └── agent/
-    ├── loop.ts         # Agent 核心循环（并发工具执行、doom loop 检测、compaction）
-    ├── tools.ts        # 工具定义 + 并发执行（read/glob/grep 并行，bash/edit 串行）
+    ├── loop.ts         # Agent 核心循环（精确 doom loop 检测、丰富 stop reasons、compaction）
+    ├── doomDetect.ts   # 精确 doom loop 检测（借鉴 OpenCode：同工具+同输入重复N次）
+    ├── tools.ts        # 工具定义 + 并发执行（read/glob/grep 并行，bash/edit 串行）+ 输出截断
+    ├── checkpoint.ts   # 任务可恢复性（每轮保存 checkpoint，支持 resume）
     └── compaction.ts   # 会话压缩（token 超阈值时调用 LLM 生成摘要）
 ```
 
@@ -40,7 +43,10 @@ packages/core/src/
 
 **关键特性：**
 - 并发工具执行（read/glob/grep 并行，bash/edit/write 串行）
-- Doom loop 检测（连续 3 次无实质文本输出的 tool-only 迭代 → 中止）
+- **精确 Doom loop 检测**（`doomDetect.ts`）：检查最近N(=3)条消息是否完全相同的工具+输入，比旧版集合比较更精准
+- **丰富的 StopReason 类型**：`completed`, `end_turn`, `max_turns`, `max_iterations`, `doom_loop_detected`, `consecutive_tool_only`, `token_budget_exceeded`, `tool_execution_error`, `api_error`
+- **工具输出截断**：`tools.ts` 中所有工具输出超 8000 字符自动截断，防止 context overflow
+- **Checkpoint 恢复**：`checkpoint.ts` 每轮保存状态，失败后可 `POST /api/sessions/:id/resume` 恢复
 - Token budget 追踪（超 80k tokens 触发 session compaction）
 - 消息格式正确（保留完整 assistant content，包括 text + tool_use）
 - SSE 流式输出（`runAgentLoopStream` 异步生成器）
@@ -48,6 +54,7 @@ packages/core/src/
 **API：**
 - `POST /api/agent/execute` — 阻塞式执行
 - `GET/POST /api/agent/stream` — SSE 流式执行
+- `POST /api/sessions/:id/resume` — 从 checkpoint 恢复任务
 
 ### Permission (src/permission.ts)
 借鉴 Claude Code 的纵深防御安全检查。
@@ -78,6 +85,18 @@ packages/core/src/
 ### Server (src/server.ts)
 Hono 服务端，提供完整 REST API。
 
+**新增端点（2026-04-16）：**
+- `GET /api/sessions/:id/resume` — 查看 session 的 checkpoint
+- `POST /api/sessions/:id/resume` — 从 checkpoint 恢复并继续任务
+- `DELETE /api/sessions/:id/checkpoint` — 删除 checkpoint
+
+### REPL (src/repl.ts)
+最小化 CLI 界面，通过 SSE 与 agent 实时交互，支持 session 管理和 checkpoint 查看。
+
+```bash
+pnpm repl
+```
+
 ## 开发
 
 ```bash
@@ -90,6 +109,9 @@ cp config.json.example config.json
 
 # 开发模式
 pnpm dev
+
+# REPL 交互界面
+pnpm repl
 
 # 构建
 pnpm build

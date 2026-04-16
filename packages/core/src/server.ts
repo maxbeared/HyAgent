@@ -38,6 +38,7 @@ import { checkPathSafety, checkCommandSafety } from './permission.js'
 import { executeTool } from './agent/tools.js'
 import { runAgentLoop, runAgentLoopStream, type AgentConfig } from './agent/loop.js'
 import type { Message } from './agent/compaction.js'
+import { getCheckpoint, deleteCheckpoint, type TaskCheckpoint } from './agent/checkpoint.js'
 
 // ---- Types ----
 
@@ -289,6 +290,68 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     return session ? c.json(session.messages) : c.json({ error: 'Session not found' }, 404)
   })
 
+  // ---- Session Resume (checkpoint recovery) ----
+
+  app.get('/api/sessions/:id/resume', c => {
+    const sessionId = c.req.param('id')
+    const checkpoint = getCheckpoint(sessionId)
+    if (!checkpoint) {
+      return c.json({ canResume: false, error: 'No checkpoint found for this session' }, 404)
+    }
+    return c.json({ canResume: true, checkpoint })
+  })
+
+  app.post('/api/sessions/:id/resume', async c => {
+    const sessionId = c.req.param('id')
+    const session = sessions.get(sessionId)
+    if (!session) return c.json({ error: 'Session not found' }, 404)
+
+    const checkpoint = getCheckpoint(sessionId)
+    if (!checkpoint) {
+      return c.json({ error: 'No checkpoint found for this session' }, 404)
+    }
+
+    const { maxIterations } = await c.req.json().catch(() => ({}))
+
+    // Run agent loop from checkpoint state
+    const result = await runAgentLoop(
+      checkpoint.task,
+      agentCfg(),
+      maxIterations ?? 30,
+      checkpoint.messages,
+      undefined,
+      sessionId,
+    )
+
+    // Delete checkpoint after successful resume
+    deleteCheckpoint(sessionId)
+
+    // Append result to session
+    if (result.content) {
+      session.messages.push({
+        id: `msg_${Date.now()}`,
+        role: 'assistant',
+        content: result.content,
+        timestamp: Date.now(),
+      })
+    }
+    session.updatedAt = Date.now()
+
+    return c.json({
+      sessionId,
+      message: result.content,
+      iterations: result.iterations,
+      success: result.success,
+      stopReason: result.stopReason,
+      error: result.error,
+    })
+  })
+
+  app.delete('/api/sessions/:id/checkpoint', c => {
+    deleteCheckpoint(c.req.param('id'))
+    return c.json({ success: true })
+  })
+
   // ---- Tools ----
 
   app.post('/api/tools/execute', async c => {
@@ -410,7 +473,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     session.messages.push(userMsg)
 
     // Run agent loop with session history
-    const result = await runAgentLoop(content, agentCfg(), maxIterations ?? 30, history)
+    const result = await runAgentLoop(content, agentCfg(), maxIterations ?? 30, history, undefined, session.id)
 
     // Append assistant messages from the loop to session
     // The loop returned the result; we need to add the assistant turn(s)
@@ -431,6 +494,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
       message: result.content,
       iterations: result.iterations,
       success: result.success,
+      stopReason: result.stopReason,
       error: result.error,
     })
   })
@@ -453,7 +517,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     session.updatedAt = Date.now()
 
     return streamSSE(c, async stream => {
-      for await (const event of runAgentLoopStream(task, agentCfg(), 30, history)) {
+      for await (const event of runAgentLoopStream(task, agentCfg(), 30, history, undefined, session.id)) {
         await stream.writeSSE({ data: JSON.stringify(event) })
         // On completion, append the assistant message to session
         if (event.type === 'done' && event.content) {

@@ -17,7 +17,8 @@
     "dev:server": "tsx watch src/server/dev.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "repl": "tsx src/repl.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.0.0",
