@@ -1,0 +1,10 @@
+import type { Config } from 'turbo'
+
+export default {
+  pipeline: {
+    build: {
+      inputs: ['src/**'],
+      outputs: ['dist/**'],
+    },
+  },
+} satisfies Config

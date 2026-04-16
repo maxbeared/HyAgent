@@ -1,0 +1,35 @@
+{
+  "name": "@hybrid-agent/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./permission": "./src/permission/index.ts",
+    "./tool": "./src/tool/tool.ts",
+    "./agent": "./src/agent/coordinator/index.ts",
+    "./session": "./src/session/index.ts",
+    "./provider": "./src/provider/provider.ts",
+    "./server": "./src/server/server.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/dev.ts",
+    "dev:server": "tsx watch src/server/dev.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.0.0",
+    "ai": "^3.0.0",
+    "effect": "^3.0.0",
+    "hono": "^4.0.0",
+    "tsx": "^4.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.4"
+  }
+}
