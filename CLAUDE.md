@@ -93,8 +93,14 @@ Hono 服务端，提供完整 REST API。
 ### REPL (src/repl.ts)
 最小化 CLI 界面，通过 SSE 与 agent 实时交互，支持 session 管理和 checkpoint 查看。
 
+默认连接 `http://localhost:3001`，可通过 `HYBRID_AGENT_URL` 环境变量修改。
+
 ```bash
+# 默认端口 3001
 pnpm repl
+
+# 自定义端口
+HYBRID_AGENT_URL=http://localhost:3000 pnpm repl
 ```
 
 ## 开发

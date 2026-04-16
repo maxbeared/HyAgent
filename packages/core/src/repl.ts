@@ -20,7 +20,7 @@
 import * as readline from 'readline'
 import { stdin, stdout } from 'process'
 
-const DEFAULT_BASE_URL = 'http://localhost:3000'
+const DEFAULT_BASE_URL = process.env.HYBRID_AGENT_URL ?? 'http://localhost:3001'
 
 interface Session {
   id: string
