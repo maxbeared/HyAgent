@@ -15,77 +15,68 @@
 2. **单个代码文件过大时需要重构**。当一个文件超过500行时，应考虑拆分为多个小文件，保持代码可维护性。
 3. **提交代码前先更新CLAUDE.md**。每次代码提交前，应先更新CLAUDE.md说明本次修改内容，再提交代码。
 
+## 文件结构
+
+```
+packages/core/src/
+├── dev.ts              # 入口（~30行），启动 Hono 服务
+├── config.ts           # 配置加载：扫描 hybrid-agent/Claude/OpenCode 配置文件
+├── permission.ts       # 路径/命令安全检查（借鉴 Claude Code pathValidation）
+├── server.ts           # Hono HTTP 路由（~250行）
+└── agent/
+    ├── loop.ts         # Agent 核心循环（并发工具执行、doom loop 检测、compaction）
+    ├── tools.ts        # 工具定义 + 并发执行（read/glob/grep 并行，bash/edit 串行）
+    └── compaction.ts   # 会话压缩（token 超阈值时调用 LLM 生成摘要）
+```
+
 ## 核心模块
 
-### Permission (src/permission/)
-融合Claude Code和OpenCode的权限系统。
+### Agent Loop (src/agent/loop.ts)
+核心 Agent 执行循环，能独立完成复杂任务（如开发完整 React 网页）。
 
-**关键文件：**
-- `index.ts` - Effect服务入口
-- `pipeline.ts` - 7步权限检查管道 (来自Claude Code)
-- `evaluate.ts` - 扁平规则匹配 (来自OpenCode)
-- `pathValidation.ts` - 路径安全检查 (来自Claude Code)
-- `sandbox.ts` - 沙箱决策 (来自Claude Code)
+**设计来源：**
+- Claude Code `query.ts`: while(true) 循环，stop_reason 判断
+- OpenCode `processor.ts`: doom loop 检测 (DOOM_LOOP_THRESHOLD=3)
 
-**安全特性：**
-- UNC路径阻止 (防止NTLM泄露)
-- 设备路径阻止 (/dev/*)
-- 敏感路径保护 (.git/, .ssh/, .aws/)
-- 路径遍历检测
-- 危险命令检测 (rm -rf /)
+**关键特性：**
+- 并发工具执行（read/glob/grep 并行，bash/edit/write 串行）
+- Doom loop 检测（连续 3 次无实质文本输出的 tool-only 迭代 → 中止）
+- Token budget 追踪（超 80k tokens 触发 session compaction）
+- 消息格式正确（保留完整 assistant content，包括 text + tool_use）
+- SSE 流式输出（`runAgentLoopStream` 异步生成器）
 
-### Coordinator (src/agent/coordinator/)
-多Agent协作编排服务。
+**API：**
+- `POST /api/agent/execute` — 阻塞式执行
+- `GET/POST /api/agent/stream` — SSE 流式执行
 
-**关键文件：**
-- `index.ts` - Coordinator服务 (Effect fiber实现)
-- `types.ts` - Worker/Phase类型定义
-
-**特性：**
-- Phase工作流: Research → Synthesis → Implementation → Verification
-- Effect.forkScoped隔离的Worker
-- 消息通过Effect Queue传递
-
-### Tool (src/tool/)
-安全增强的工具系统。
-
-**关键文件：**
-- `tool.ts` - 工具接口定义
-- `bash.ts` - 安全增强的bash工具
-- `read.ts` / `edit.ts` - 带路径检查的文件工具
-- `registry.ts` - 工具注册表
+### Permission (src/permission.ts)
+借鉴 Claude Code 的纵深防御安全检查。
 
 **安全特性：**
-- 执行前路径安全检查
-- 沙箱执行决策
-- Permission集成
+- UNC 路径阻止（防止 NTLM 凭证泄露）
+- 设备路径阻止（/dev/*）
+- 敏感路径保护（.git/, .ssh/, .aws/）
+- 路径遍历检测（../）
+- 危险命令检测（rm -rf /, fork bomb, curl|sh）
 
-### Session (src/session/)
-会话管理与压缩。
+### Tools (src/agent/tools.ts)
+6 个内置工具，支持并发执行。
 
-**关键文件：**
-- `index.ts` - Session服务
-- `types.ts` - 会话/消息类型
+| 工具 | 并发安全 | 说明 |
+|------|---------|------|
+| read | ✓ | 读文件 |
+| glob | ✓ | 文件模式搜索 |
+| grep | ✓ | 内容搜索 |
+| bash | ✗ | 执行命令 |
+| write | ✗ | 写文件 |
+| edit | ✗ | 替换文件内容 |
 
-**特性：**
-- 会话CRUD操作
-- 自动压缩 (Compaction)
-- Token预算管理
+### Config (src/config.ts)
+- hybrid-agent 自己的配置直接使用
+- Claude Code / OpenCode 配置作为"建议"，需要用户通过 `POST /api/config/apply` 确认
 
-### Provider (src/provider/)
-多Provider支持 (AI SDK v3)。
-
-**关键文件：**
-- `provider.ts` - Provider服务
-- `types.ts` - Model/Provider类型
-
-**支持：**
-- Anthropic (Claude)
-- OpenAI
-- Google
-
-### Server (src/server/)
-Hono服务端。
+### Server (src/server.ts)
+Hono 服务端，提供完整 REST API。
 
 ## 开发
 
