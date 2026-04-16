@@ -24,13 +24,21 @@ interface Config {
 }
 
 function getConfigPath(): string | null {
-  // Priority: user's local config > local project config > env vars
+  // Priority: user's local config > OpenCode config > local project config > env vars
   const candidates = [
-    // User's home config (highest priority - user's own config)
+    // User's own hybrid-agent config (highest priority)
     path.join(os.homedir(), '.hybrid-agent', 'config.json'),
     path.join(os.homedir(), '.config', 'hybrid-agent', 'config.json'),
     // Windows: AppData
     path.join(process.env.APPDATA || '', 'hybrid-agent', 'config.json'),
+    // OpenCode user config (import if exists)
+    path.join(os.homedir(), '.config', 'opencode', 'opencode.jsonc'),
+    path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
+    path.join(os.homedir(), '.config', 'opencode', 'config.json'),
+    // OpenCode Windows AppData
+    path.join(process.env.APPDATA || '', 'opencode', 'opencode.jsonc'),
+    path.join(process.env.APPDATA || '', 'opencode', 'opencode.json'),
+    path.join(process.env.APPDATA || '', 'opencode', 'config.json'),
     // Local project config
     path.join(process.cwd(), 'config.json'),
     path.join(process.cwd(), 'config.local.json'),
