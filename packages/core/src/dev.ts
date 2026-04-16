@@ -13,7 +13,7 @@ import path from 'path'
 import os from 'os'
 
 // ============================================================================
-// Load Config - Priority: local config.json > user's home config > env vars
+// Load Config - Priority: user's local config > imported config > env vars
 // ============================================================================
 
 interface Config {
@@ -57,6 +57,77 @@ function getConfigPath(): string | null {
   return null
 }
 
+/**
+ * Import and normalize config from different sources (OpenCode, Claude Code, hybrid-agent).
+ * Each has different structure:
+ * - hybrid-agent: { provider, baseUrl, apiKey, model }
+ * - OpenCode: { provider: { providerId: { apiKey, options: { baseURL } } }, model: "provider/model" }
+ * - Claude Code: uses env vars mainly, settings.json has other settings
+ */
+function importConfig(configPath: string, config: Config): Config {
+  try {
+    const content = readFileSync(configPath, 'utf-8')
+
+    let data: any
+    // Handle JSONC comments (OpenCode uses jsonc format)
+    try {
+      data = JSON.parse(content)
+    } catch {
+      // Try removing comments for JSONC format
+      const jsonContent = content
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+      data = JSON.parse(jsonContent)
+    }
+
+    // hybrid-agent native format
+    if (data.provider && data.apiKey) {
+      return { ...config, ...data }
+    }
+
+    // OpenCode format: { provider: { "provider-id": { options: { apiKey, baseURL } } }, model: "anthropic/claude-..." }
+    if (data.provider && typeof data.provider === 'object') {
+      // Find first provider with apiKey
+      for (const [providerName, providerData] of Object.entries(data.provider) as [string, any][]) {
+        if (providerData?.options?.apiKey) {
+          const imported: Partial<Config> = {
+            provider: providerName,
+            apiKey: providerData.options.apiKey,
+          }
+          if (providerData.options.baseURL) {
+            imported.baseUrl = providerData.options.baseURL
+          }
+          // Parse model from "provider/model" format
+          if (data.model && typeof data.model === 'string' && data.model.includes('/')) {
+            imported.model = data.model.split('/')[1]
+            if (!imported.provider) {
+              imported.provider = data.model.split('/')[0]
+            }
+          }
+          return { ...config, ...imported }
+        }
+      }
+    }
+
+    // Claude Code settings.json - uses env vars
+    // ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY
+    if (data.env?.ANTHROPIC_API_KEY || data.env?.ANTHROPIC_AUTH_TOKEN) {
+      return {
+        ...config,
+        apiKey: data.env.ANTHROPIC_API_KEY || data.env.ANTHROPIC_AUTH_TOKEN,
+        baseUrl: data.env.ANTHROPIC_BASE_URL || config.baseUrl,
+        model: data.env.ANTHROPIC_MODEL || config.model,
+      }
+    }
+
+    // Fallback: try direct merge for any other format
+    return { ...config, ...data }
+  } catch (e: any) {
+    console.log(`Failed to parse config from ${configPath}: ${e.message}`)
+    return config
+  }
+}
+
 let config: Config = {
   provider: 'minimaxi',
   baseUrl: 'https://api.minimaxi.com/anthropic',
@@ -66,14 +137,8 @@ let config: Config = {
 
 const configPath = getConfigPath()
 if (configPath) {
-  try {
-    const configFile = readFileSync(configPath, 'utf-8')
-    config = { ...config, ...JSON.parse(configFile) }
-    console.log(`Loaded config from: ${configPath}`)
-  } catch (e: any) {
-    console.log(`Failed to load config from ${configPath}: ${e.message}`)
-    console.log('Using default/config from environment')
-  }
+  config = importConfig(configPath, config)
+  console.log(`Loaded config from: ${configPath}`)
 } else {
   console.log('No config file found, using environment/defaults')
 }
@@ -107,8 +172,113 @@ interface Worker {
   result?: string
 }
 
+interface ModelInfo {
+  id: string
+  name: string
+  context: number
+  provider?: string
+  addedAt: number
+  fromModelsDev?: boolean
+}
+
 const sessions = new Map<string, Session>()
 const workers = new Map<string, Worker>()
+
+// 动态模型列表 - 用户可以添加
+const customModels = new Map<string, ModelInfo>()
+
+// 从配置导入的模型映射
+const configModels: Record<string, string[]> = {
+  anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6'],
+  openai: ['gpt-4o', 'gpt-4o-mini'],
+  google: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+  minimaxi: [config.model],
+}
+
+// models.dev 模型缓存
+let modelsDevCache: Record<string, any> = {}
+let modelsDevCacheTime = 0
+const MODELS_DEV_TTL = 5 * 60 * 1000 // 5分钟缓存
+
+// 从 models.dev 获取模型列表
+async function fetchModelsFromModelsDev(): Promise<Record<string, any>> {
+  const now = Date.now()
+  if (modelsDevCacheTime && now - modelsDevCacheTime < MODELS_DEV_TTL) {
+    return modelsDevCache
+  }
+
+  try {
+    const response = await fetch('https://models.dev/api.json', {
+      headers: { 'User-Agent': 'HybridAgent/1.0' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (response.ok) {
+      modelsDevCache = await response.json()
+      modelsDevCacheTime = now
+    }
+  } catch (e) {
+    console.log('Failed to fetch models.dev:', e)
+  }
+  return modelsDevCache
+}
+
+// 添加自定义模型
+function addModel(provider: string, modelId: string, modelName?: string): ModelInfo {
+  const info: ModelInfo = {
+    id: modelId,
+    name: modelName || modelId,
+    context: 100000,
+    provider,
+    addedAt: Date.now(),
+  }
+  customModels.set(`${provider}:${modelId}`, info)
+  return info
+}
+
+// 获取所有可用模型（合并配置模型和自定义模型）
+async function getModelsForProvider(provider: string): Promise<ModelInfo[]> {
+  const result: ModelInfo[] = []
+
+  // 先从 models.dev 获取（如果可用）
+  const modelsDev = await fetchModelsFromModelsDev()
+  if (modelsDev[provider]?.models) {
+    for (const [modelId, modelData] of Object.entries(modelsDev[provider].models)) {
+      const m = modelData as any
+      result.push({
+        id: modelId,
+        name: m.name || modelId,
+        context: m.limit?.context || 100000,
+        provider,
+        addedAt: 0,
+        fromModelsDev: true,
+      })
+    }
+  }
+
+  // 添加配置中的模型（如果models.dev没有提供）
+  const configProviderModels = configModels[provider] || []
+  const existingIds = new Set(result.map(m => m.id))
+  for (const modelId of configProviderModels) {
+    if (!existingIds.has(modelId)) {
+      result.push({
+        id: modelId,
+        name: modelId,
+        context: 100000,
+        provider,
+        addedAt: 0,
+      })
+    }
+  }
+
+  // 添加自定义模型
+  for (const model of customModels.values()) {
+    if (model.provider === provider) {
+      result.push(model)
+    }
+  }
+
+  return result
+}
 
 // ============================================================================
 // Health & Info
@@ -137,33 +307,57 @@ app.get('/api/info', (c) => c.json({
 
 app.get('/api/providers', (c) => {
   return c.json([
-    { id: 'anthropic', name: 'Anthropic', models: ['claude-opus-4-6', 'claude-sonnet-4-6'] },
-    { id: 'openai', name: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini'] },
-    { id: 'google', name: 'Google', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] },
-    { id: 'minimaxi', name: 'MiniMax', models: [config.model] },
+    { id: 'anthropic', name: 'Anthropic' },
+    { id: 'openai', name: 'OpenAI' },
+    { id: 'google', name: 'Google' },
+    { id: 'minimaxi', name: 'MiniMax' },
   ])
 })
 
-app.get('/api/models', (c) => {
-  const provider = c.req.query('provider') ?? 'anthropic'
-  const models: Record<string, any[]> = {
-    anthropic: [
-      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', context: 200000 },
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', context: 200000 },
-    ],
-    openai: [
-      { id: 'gpt-4o', name: 'GPT-4o', context: 128000 },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', context: 128000 },
-    ],
-    google: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', context: 1000000 },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', context: 1000000 },
-    ],
-    minimaxi: [
-      { id: config.model, name: 'MiniMax M2', context: 100000 },
-    ],
+app.get('/api/models', async (c) => {
+  const provider = c.req.query('provider') ?? config.provider
+  const models = await getModelsForProvider(provider)
+  return c.json(models)
+})
+
+// 刷新 models.dev 缓存
+app.post('/api/models/refresh', async (c) => {
+  modelsDevCacheTime = 0 // 强制刷新
+  const models = await fetchModelsFromModelsDev()
+  return c.json({ success: true, providers: Object.keys(models).length })
+})
+
+// 添加自定义模型
+app.post('/api/models', async (c) => {
+  const { provider, modelId, modelName } = await c.req.json()
+  if (!provider || !modelId) {
+    return c.json({ error: 'provider and modelId are required' }, 400)
   }
-  return c.json(models[provider] ?? [])
+  const model = addModel(provider, modelId, modelName)
+  return c.json(model, 201)
+})
+
+// 删除自定义模型
+app.delete('/api/models', async (c) => {
+  const { provider, modelId } = await c.req.json()
+  const key = `${provider}:${modelId}`
+  if (customModels.has(key)) {
+    customModels.delete(key)
+    return c.json({ success: true })
+  }
+  return c.json({ error: 'Model not found' }, 404)
+})
+
+// 获取/设置当前模型
+app.get('/api/model/current', (c) => {
+  return c.json({ provider: config.provider, model: config.model })
+})
+
+app.put('/api/model/current', async (c) => {
+  const { provider, model } = await c.req.json()
+  if (provider) config.provider = provider
+  if (model) config.model = model
+  return c.json({ provider: config.provider, model: config.model })
 })
 
 // ============================================================================
