@@ -159,6 +159,13 @@ Any other input is sent as a message to the agent.
         },
       )
 
+      // If the response itself is an error (non-200), read the error body and yield
+      if (!res.ok) {
+        const errBody = await res.text()
+        stdout.write(`\n[HTTP Error ${res.status}] ${errBody}\n`)
+        return
+      }
+
       let lastEvent: any = null
       for await (const event of SSEParse(res.body!)) {
         if (!agentTask) break // interrupted
@@ -178,6 +185,9 @@ Any other input is sent as a message to the agent.
           case 'compaction':
             stdout.write(`\n[Compacting session...]\n`)
             break
+          case 'retry':
+            stdout.write(`\n[Retry] ${event.content}\n`)
+            break
           case 'done':
             stdout.write('\n')
             lastEvent = event
@@ -187,13 +197,20 @@ Any other input is sent as a message to the agent.
             lastEvent = event
             break
         }
-      }
 
-      if (lastEvent?.stopReason) {
-        stdout.write(`[Stop reason: ${lastEvent.stopReason}]\n`)
-      }
-      if (lastEvent?.iterations) {
-        stdout.write(`[Iterations: ${lastEvent.iterations}]\n`)
+        // Only exit the SSE loop for terminal stop reasons.
+        // 'tool_execution_error' is NOT terminal — the agent should continue.
+        if (lastEvent?.stopReason) {
+          const terminalReasons = new Set([
+            'completed', 'max_iterations', 'api_error',
+            'doom_loop_detected', 'consecutive_tool_only', 'token_budget_exceeded',
+          ])
+          if (terminalReasons.has(lastEvent.stopReason)) {
+            break // exit the for loop
+          }
+          // Non-terminal: keep receiving events
+          lastEvent = null
+        }
       }
     } catch (e: any) {
       stdout.write(`\n[Request failed] ${e.message}\n`)

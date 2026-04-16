@@ -43,9 +43,11 @@ packages/core/src/
 
 **关键特性：**
 - 并发工具执行（read/glob/grep 并行，bash/edit/write 串行）
-- **精确 Doom loop 检测**（`doomDetect.ts`）：检查最近N(=3)条消息是否完全相同的工具+输入，比旧版集合比较更精准
+- **精确 Doom loop 检测**（`doomDetect.ts`）：检查最近N(=3)条消息是否完全相同的工具+输入；`hasSubstantialText` 阈值 10 字符，短文本（如"继续"、"好的"）即可重置计数器
 - **丰富的 StopReason 类型**：`completed`, `end_turn`, `max_turns`, `max_iterations`, `doom_loop_detected`, `consecutive_tool_only`, `token_budget_exceeded`, `tool_execution_error`, `api_error`
-- **工具输出截断**：`tools.ts` 中所有工具输出超 8000 字符自动截断，防止 context overflow
+- **LLM 重试机制**：`callLLM` 单次调用，重试逻辑在上层；`formatAPIError()` 通用解析多种 provider 错误格式（OpenAI/Anthropic/MiniMax）
+- **SSE 非阻塞流**：工具失败等非终止错误保持 SSE 流开放，agent 可继续运行
+- **工具输出截断**：`tools.ts` 中所有工具输出超 8000 字符自动截断；`bash` 错误格式为 `Error (exit code N): ...`，`success: false` 明确
 - **Checkpoint 恢复**：`checkpoint.ts` 每轮保存状态，失败后可 `POST /api/sessions/:id/resume` 恢复
 - Token budget 追踪（超 80k tokens 触发 session compaction）
 - 消息格式正确（保留完整 assistant content，包括 text + tool_use）
@@ -67,16 +69,16 @@ packages/core/src/
 - 危险命令检测（rm -rf /, fork bomb, curl|sh）
 
 ### Tools (src/agent/tools.ts)
-6 个内置工具，支持并发执行。
+6 个内置工具，支持并发执行。所有工具路径支持 `~` 展开为用户目录。
 
 | 工具 | 并发安全 | 说明 |
 |------|---------|------|
-| read | ✓ | 读文件 |
+| read | ✓ | 读文件（~ 展开） |
 | glob | ✓ | 文件模式搜索 |
 | grep | ✓ | 内容搜索 |
-| bash | ✗ | 执行命令 |
-| write | ✗ | 写文件 |
-| edit | ✗ | 替换文件内容 |
+| bash | ✗ | 执行命令，错误格式 `Error (exit code N): ...` |
+| write | ✗ | 写文件（~ 展开） |
+| edit | ✗ | 替换文件内容（~ 展开） |
 
 ### Config (src/config.ts)
 - hybrid-agent 自己的配置直接使用
@@ -90,6 +92,9 @@ Hono 服务端，提供完整 REST API。
 - `POST /api/sessions/:id/resume` — 从 checkpoint 恢复并继续任务
 - `DELETE /api/sessions/:id/checkpoint` — 删除 checkpoint
 
+**SSE 事件类型：** `text`, `tool_start`, `tool_result`, `compaction`, `retry`, `done`, `error`
+非终止错误（如 `tool_execution_error`）不会关闭 SSE 流，agent 可继续处理。
+
 ### REPL (src/repl.ts)
 最小化 CLI 界面，通过 SSE 与 agent 实时交互，支持 session 管理和 checkpoint 查看。
 
@@ -102,6 +107,17 @@ pnpm repl
 # 自定义端口
 HYBRID_AGENT_URL=http://localhost:3000 pnpm repl
 ```
+
+**REPL 命令：**
+- `:help` — 显示帮助
+- `:new` — 创建新 session
+- `:sessions` — 列出所有 session
+- `:session <id>` — 切换到指定 session
+- `:info` — 显示当前 session 信息
+- `:checkpoint` — 查看当前 session 的 checkpoint
+- `:quit` — 退出 REPL
+
+**快捷键：** `Ctrl+C` 中断当前任务，`Ctrl+D` 退出，`Ctrl+L` 清屏
 
 ## 开发
 

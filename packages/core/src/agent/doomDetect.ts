@@ -91,17 +91,19 @@ export function detectDoomLoop(
 /**
  * Check if a message has "substantial" text content.
  * Used alongside doom loop detection to reset the consecutive counter.
+ * Lowered from 30 to 10 chars: even short meaningful phrases
+ * like "好的", "继续", "明白了" should reset the counter.
  *
- * @returns true if message has > 30 chars of non-empty text
+ * @returns true if message has > 10 chars of non-empty text
  */
 export function hasSubstantialText(content: any): boolean {
   if (typeof content === 'string') {
-    return content.trim().length > 30
+    return content.trim().length > 10
   }
   if (Array.isArray(content)) {
     return content.some((b: any) => {
       if (b.type === 'text' && b.text) {
-        return b.text.trim().length > 30
+        return b.text.trim().length > 10
       }
       return false
     })

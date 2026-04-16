@@ -528,7 +528,16 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
             timestamp: Date.now(),
           })
         }
-        if (event.type === 'done' || event.type === 'error') break
+        // Only break (close SSE) for terminal stop reasons.
+        // 'tool_execution_error' is non-terminal — agent continues, keep stream open.
+        if (event.stopReason) {
+          const terminal = new Set([
+            'completed', 'max_iterations', 'api_error',
+            'doom_loop_detected', 'consecutive_tool_only', 'token_budget_exceeded',
+          ])
+          if (terminal.has(event.stopReason)) break
+          // Non-terminal: keep stream open, continue receiving events
+        }
       }
     })
   })

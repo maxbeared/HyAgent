@@ -74,7 +74,7 @@ export interface AgentConfig {
 }
 
 export interface AgentStreamEvent {
-  type: 'text' | 'tool_start' | 'tool_result' | 'compaction' | 'done' | 'error'
+  type: 'text' | 'tool_start' | 'tool_result' | 'compaction' | 'done' | 'error' | 'retry'
   content?: string
   toolName?: string
   toolId?: string
@@ -108,6 +108,57 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/**
+ * Format error from API response for display. Handles multiple provider formats:
+ * - OpenAI:        { error: { message, type, code? } }
+ * - Anthropic:    { type: "error", error: { type, message, request_id? } }
+ * - MiniMax:       { type: "error", error: { type, message }, request_id }
+ * - Generic:      { message } or plain text
+ */
+function formatAPIError(status: number, rawBody: string): { message: string; retryable: boolean; requestId?: string } {
+  let body: any
+  try {
+    body = rawBody ? JSON.parse(rawBody) : {}
+  } catch {
+    return { message: rawBody || `HTTP ${status}`, retryable: RETRYABLE_STATUS.has(status), requestId: undefined }
+  }
+
+  const retryable = RETRYABLE_STATUS.has(status)
+  const requestId = body.request_id || body.error?.request_id || undefined
+
+  // OpenAI format: { error: { message, type?, code? } }
+  if (body.error?.message) {
+    const e = body.error
+    const type = e.type || 'error'
+    const code = e.code ? ` [${e.code}]` : ''
+    return { message: `${type}${code}: ${e.message}`, retryable, requestId }
+  }
+
+  // Anthropic/MiniMax nested format: { type, error: { type, message }, request_id? }
+  if (body.error?.type && body.error?.message) {
+    const e = body.error
+    const req = requestId ? ` (${requestId})` : ''
+    return { message: `${e.type}${req}: ${e.message}`, retryable, requestId }
+  }
+
+  // Top-level { type, message }
+  if (body.type && body.message) {
+    const req = requestId ? ` (${requestId})` : ''
+    return { message: `${body.type}${req}: ${body.message}`, retryable, requestId }
+  }
+
+  // Fallback: use raw body or status
+  return {
+    message: body.message || rawBody || `HTTP ${status}`,
+    retryable,
+    requestId,
+  }
+}
+
+/**
+ * Make a single LLM API call. Returns { data } on success, throws on non-retryable error.
+ * Does NOT handle retry logic — caller handles that via the AsyncGenerator yield.
+ */
 async function callLLM(
   messages: Message[],
   cfg: AgentConfig,
@@ -123,56 +174,37 @@ async function callLLM(
     tool_choice: { type: 'auto' },
   })
 
-  let lastError: Error | null = null
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      // Exponential backoff: 1s, 2s, 4s, 8s, 16s
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 16000)
-      console.log(`[Agent] Retrying LLM call (attempt ${attempt}/${MAX_RETRIES}) after ${delay}ms...`)
-      await sleep(delay)
+  const response = await fetch(`${baseUrl}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${cfg.apiKey}`,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body,
+  })
+
+  if (response.ok) {
+    const data: any = await response.json()
+    if (data && data.error) {
+      const errorText = JSON.stringify(data)
+      const { message, retryable } = formatAPIError(response.status, errorText)
+      const err = new Error(message)
+      ;(err as any).retryable = retryable
+      ;(err as any).rawError = data
+      throw err
     }
-
-    const response = await fetch(`${baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.apiKey}`,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body,
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      // Check if the response JSON contains an error (e.g., overloaded_error 529)
-      if (data && data.error) {
-        const errorMsg = data.error.message || JSON.stringify(data.error)
-        lastError = new Error(`LLM API error: ${errorMsg}`)
-        // overloaded_error in body is retryable (nested under data.error.error.type)
-        const nestedType = data.error.error?.type || data.error.type
-        if (nestedType !== 'overloaded_error') {
-          throw lastError  // Non-retryable error in body
-        }
-        // Will retry in next iteration with backoff
-        console.log(`[Agent] Retrying on overloaded_error (${nestedType})...`)
-      } else {
-        return data
-      }
-    } else {
-      const errorText = await response.text()
-      lastError = new Error(`LLM API error ${response.status}: ${errorText}`)
-
-      if (!RETRYABLE_STATUS.has(response.status)) {
-        // Non-retryable error (4xx auth errors, bad request, etc.)
-        throw lastError
-      }
-
-      console.log(`[Agent] Transient error ${response.status}, will retry...`)
-    }
+    return data
   }
 
-  throw lastError ?? new Error('LLM call failed after max retries')
+  const errorText = await response.text()
+  const { message, retryable } = formatAPIError(response.status, errorText)
+  const err = new Error(`HTTP ${response.status}: ${message}`)
+  ;(err as any).status = response.status
+  ;(err as any).retryable = retryable
+  ;(err as any).rawError = message
+  throw err
 }
 
 /**
@@ -207,19 +239,47 @@ export async function* runAgentLoopStream(
   while (iterations < maxIterations) {
     iterations++
 
-    // ---- Call LLM ----
+    // ---- Call LLM (with retry loop — yields retry events immediately after failure) ----
     let data: any
-    try {
-      data = await callLLM(messages, cfg)
-    } catch (e: any) {
-      yield {
-        type: 'error',
-        error: e.message,
-        iterations,
-        stopReason: 'api_error',
-        stopDetail: { reason: 'api_error', lastError: e.message },
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        data = await callLLM(messages, cfg)
+        // Success — done with LLM calls
+        break
+      } catch (e: any) {
+        if (attempt === MAX_RETRIES) {
+          // Exhausted all retries
+          yield {
+            type: 'error',
+            error: `LLM API failed after ${MAX_RETRIES} retries: ${e.message}`,
+            iterations,
+            stopReason: 'api_error',
+            stopDetail: { reason: 'api_error', lastError: e.message },
+          }
+          return
+        }
+
+        if (e.retryable) {
+          // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+          const delay = Math.min(1000 * Math.pow(2, attempt), 16000)
+          yield {
+            type: 'retry',
+            content: `Retry ${attempt + 1}/${MAX_RETRIES} — ${e.message} — waiting ${delay}ms...`,
+          }
+          await sleep(delay)
+          // Continue to next retry
+        } else {
+          // Non-retryable error — abort immediately
+          yield {
+            type: 'error',
+            error: e.message,
+            iterations,
+            stopReason: 'api_error',
+            stopDetail: { reason: 'api_error', lastError: e.message },
+          }
+          return
+        }
       }
-      return
     }
 
     // ---- Track token usage ----
@@ -354,7 +414,8 @@ export async function* runAgentLoopStream(
       }
     }
 
-    // If all tools failed, abort with error
+    // If all tools failed, yield error but DON'T abort — let LLM see the failure
+    // and decide what to do next (retry, try different approach, give up, etc.)
     if (hasErrors && results.length > 0) {
       yield {
         type: 'error',
@@ -367,7 +428,7 @@ export async function* runAgentLoopStream(
           actualIterations: iterations,
         },
       }
-      return
+      // Don't return — continue the loop so LLM can handle the failure
     }
 
     // ---- Session compaction ----
