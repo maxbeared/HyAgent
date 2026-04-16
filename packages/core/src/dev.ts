@@ -8,10 +8,12 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import path from 'path'
+import os from 'os'
 
 // ============================================================================
-// Load Config
+// Load Config - Priority: local config.json > user's home config > env vars
 // ============================================================================
 
 interface Config {
@@ -21,6 +23,27 @@ interface Config {
   model: string
 }
 
+function getConfigPath(): string | null {
+  // Priority: user's local config > local project config > env vars
+  const candidates = [
+    // User's home config (highest priority - user's own config)
+    path.join(os.homedir(), '.hybrid-agent', 'config.json'),
+    path.join(os.homedir(), '.config', 'hybrid-agent', 'config.json'),
+    // Windows: AppData
+    path.join(process.env.APPDATA || '', 'hybrid-agent', 'config.json'),
+    // Local project config
+    path.join(process.cwd(), 'config.json'),
+    path.join(process.cwd(), 'config.local.json'),
+  ]
+
+  for (const configPath of candidates) {
+    if (existsSync(configPath)) {
+      return configPath
+    }
+  }
+  return null
+}
+
 let config: Config = {
   provider: 'minimaxi',
   baseUrl: 'https://api.minimaxi.com/anthropic',
@@ -28,12 +51,18 @@ let config: Config = {
   model: 'MiniMax-M2.7',
 }
 
-try {
-  const configFile = readFileSync('./config.json', 'utf-8')
-  config = { ...config, ...JSON.parse(configFile) }
-  console.log('Loaded config from config.json')
-} catch {
-  console.log('Using default/config from environment')
+const configPath = getConfigPath()
+if (configPath) {
+  try {
+    const configFile = readFileSync(configPath, 'utf-8')
+    config = { ...config, ...JSON.parse(configFile) }
+    console.log(`Loaded config from: ${configPath}`)
+  } catch (e: any) {
+    console.log(`Failed to load config from ${configPath}: ${e.message}`)
+    console.log('Using default/config from environment')
+  }
+} else {
+  console.log('No config file found, using environment/defaults')
 }
 
 // ============================================================================

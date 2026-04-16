@@ -1,0 +1,6 @@
+{
+  "provider": "minimaxi",
+  "baseUrl": "https://api.minimaxi.com/anthropic",
+  "apiKey": "your-api-key-here",
+  "model": "MiniMax-M2.7"
+}
