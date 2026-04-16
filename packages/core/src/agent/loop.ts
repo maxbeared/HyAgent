@@ -144,18 +144,32 @@ async function callLLM(
     })
 
     if (response.ok) {
-      return response.json()
+      const data = await response.json()
+      // Check if the response JSON contains an error (e.g., overloaded_error 529)
+      if (data && data.error) {
+        const errorMsg = data.error.message || JSON.stringify(data.error)
+        lastError = new Error(`LLM API error: ${errorMsg}`)
+        // overloaded_error in body is retryable (nested under data.error.error.type)
+        const nestedType = data.error.error?.type || data.error.type
+        if (nestedType !== 'overloaded_error') {
+          throw lastError  // Non-retryable error in body
+        }
+        // Will retry in next iteration with backoff
+        console.log(`[Agent] Retrying on overloaded_error (${nestedType})...`)
+      } else {
+        return data
+      }
+    } else {
+      const errorText = await response.text()
+      lastError = new Error(`LLM API error ${response.status}: ${errorText}`)
+
+      if (!RETRYABLE_STATUS.has(response.status)) {
+        // Non-retryable error (4xx auth errors, bad request, etc.)
+        throw lastError
+      }
+
+      console.log(`[Agent] Transient error ${response.status}, will retry...`)
     }
-
-    const errorText = await response.text()
-    lastError = new Error(`LLM API error ${response.status}: ${errorText}`)
-
-    if (!RETRYABLE_STATUS.has(response.status)) {
-      // Non-retryable error (4xx auth errors, bad request, etc.)
-      throw lastError
-    }
-
-    console.log(`[Agent] Transient error ${response.status}, will retry...`)
   }
 
   throw lastError ?? new Error('LLM call failed after max retries')

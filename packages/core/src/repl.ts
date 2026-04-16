@@ -150,13 +150,11 @@ Any other input is sent as a message to the agent.
     stdout.write('\n[Agent thinking...]\n')
 
     try {
-      // Use streaming endpoint
+      // Use streaming endpoint (GET - task is in query param)
       const res = await fetch(
         `${DEFAULT_BASE_URL}/api/chat/${currentSessionId}/stream?task=${encodeURIComponent(content)}`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task: content, maxIterations: 30 }),
+          method: 'GET',
           signal: AbortSignal.timeout(300000),
         },
       )

@@ -128,18 +128,28 @@ async function executeBash(input: { command: string; cwd?: string; timeout?: num
     const truncated = output.length > MAX_TOOL_OUTPUT
     return { output: truncateOutput(output), success: true, truncated }
   } catch (e: any) {
-    const output = [e.stdout, e.stderr, e.message].filter(Boolean).join('\n').trim()
-    return { output: truncateOutput(output) || e.message, success: false }
+    // execAsync throws with { code, stdout, stderr } on non-zero exit
+    const exitCode = e.code ?? 'unknown'
+    const stderrOutput = e.stderr?.trim() || ''
+    const stdoutOutput = e.stdout?.trim() || ''
+    const cmdOutput = stderrOutput || stdoutOutput || ''
+    const errorDetail = cmdOutput ? `\nSTDERR: ${stderrOutput}\nSTDOUT: ${stdoutOutput}` : ''
+    const output = `Error (exit code ${exitCode})${errorDetail}`.trim()
+    return { output, success: false, truncated: output.length > MAX_TOOL_OUTPUT }
   }
 }
 
 async function executeRead(input: { path: string; offset?: number; limit?: number }): Promise<ToolResult> {
-  const safety = checkPathSafety(input.path)
+  // Expand ~ to user home directory
+  const resolvedPath = input.path.startsWith('~/')
+    ? input.path.replace(/^~\//, (process.env.USERPROFILE || process.env.HOME || '').replace(/\\/g, '/') + '/')
+    : input.path
+  const safety = checkPathSafety(resolvedPath)
   if (!safety.isSafe) {
     return { output: `Path blocked: ${safety.reason}`, success: false }
   }
   try {
-    const content = await fs.readFile(input.path, 'utf-8')
+    const content = await fs.readFile(resolvedPath, 'utf-8')
     const lines = content.split('\n')
     const offset = input.offset ?? 0
     const limit = input.limit ?? lines.length
@@ -153,32 +163,40 @@ async function executeRead(input: { path: string; offset?: number; limit?: numbe
 }
 
 async function executeWrite(input: { path: string; content: string }): Promise<ToolResult> {
-  const safety = checkPathSafety(input.path)
+  // Expand ~ to user home directory
+  const resolvedPath = input.path.startsWith('~/')
+    ? input.path.replace(/^~\//, (process.env.USERPROFILE || process.env.HOME || '').replace(/\\/g, '/') + '/')
+    : input.path
+  const safety = checkPathSafety(resolvedPath)
   if (!safety.isSafe) {
     return { output: `Path blocked: ${safety.reason}`, success: false }
   }
   try {
-    const dir = input.path.split('/').slice(0, -1).join('/')
+    const dir = resolvedPath.split('/').slice(0, -1).join('/')
     if (dir) await fs.mkdir(dir, { recursive: true })
-    await fs.writeFile(input.path, input.content, 'utf-8')
-    return { output: `Written to ${input.path}`, success: true }
+    await fs.writeFile(resolvedPath, input.content, 'utf-8')
+    return { output: `Written to ${resolvedPath}`, success: true }
   } catch (e: any) {
     return { output: e.message, success: false }
   }
 }
 
 async function executeEdit(input: { path: string; old_string: string; new_string: string }): Promise<ToolResult> {
-  const safety = checkPathSafety(input.path)
+  // Expand ~ to user home directory
+  const resolvedPath = input.path.startsWith('~/')
+    ? input.path.replace(/^~\//, (process.env.USERPROFILE || process.env.HOME || '').replace(/\\/g, '/') + '/')
+    : input.path
+  const safety = checkPathSafety(resolvedPath)
   if (!safety.isSafe) {
     return { output: `Path blocked: ${safety.reason}`, success: false }
   }
   try {
-    const content = await fs.readFile(input.path, 'utf-8')
+    const content = await fs.readFile(resolvedPath, 'utf-8')
     if (!content.includes(input.old_string)) {
-      return { output: `old_string not found in ${input.path}`, success: false }
+      return { output: `old_string not found in ${resolvedPath}`, success: false }
     }
     const updated = content.replace(input.old_string, input.new_string)
-    await fs.writeFile(input.path, updated, 'utf-8')
+    await fs.writeFile(resolvedPath, updated, 'utf-8')
     return { output: `Edited ${input.path}`, success: true }
   } catch (e: any) {
     return { output: e.message, success: false }
