@@ -247,3 +247,37 @@ pnpm build
 2. **安全第一** - Claude Code 的纵深防御安全
 3. **Provider无关** - 保持多 Provider 支持能力
 4. **不修改原项目** - 原项目仅作为参考
+
+## 已知问题
+
+### TypeScript 构建错误（38个）
+
+部分深层架构问题需要较大范围重构才能彻底解决：
+
+| 问题类型 | 数量 | 说明 |
+|---------|------|------|
+| Effect 类型不匹配 | ~15 | 实现返回 `Error, never` 但接口定义 `never, never` |
+| Message content/parts | 6 | 代码使用 `content` 属性但类型定义要求 `parts` 数组 |
+| Coordinator Effect | 10 | Queue/Scope/asUnit 等高层抽象类型问题 |
+| Provider/ToolRegistry | 4 | 接口类型被当作值使用 |
+
+**临时解决**：代码可正常运行，但 `pnpm build` 会报类型错误。
+
+### 未实现功能（参考 OpenCode/Claude Code）
+
+高优先级待实现：
+
+| 功能 | 来源 | 说明 |
+|------|------|------|
+| Worktree Management | OpenCode | Git worktree 隔离，per-worktree 实例引导 |
+| ACP Protocol | OpenCode | Agent 间通信、服务发现、能力协商 |
+| Dynamic Agent Generation | OpenCode | 从描述动态生成 Agent，支持多种内置 Agent 类型 |
+| IDE Extension Integration | OpenCode | VS Code/Cursor/Windsurf 扩展安装 |
+| Snapshot 批量操作 | OpenCode | 批量 git 操作，自动化清理，diff 生成 |
+| Skill URL 拉取 | OpenCode | 从 URL 拉取 skill，支持 SKILL.md 格式 |
+| Bus Event System 完善 | OpenCode | 通配符订阅，全局 Bus，实例释放事件 |
+| MCP OAuth 2.0 | OpenCode | 动态客户端注册，SSE transport，per-server 超时 |
+| Coordinator 完善 | Claude Code | Subagent 工具（AgentTool/SendMessageTool/TaskStopTool） |
+| Mailbox System | Claude Code | React context 消息队列，provider 模式 |
+| Notification Queue | Claude Code | 优先级队列，通知折叠，超时管理 |
+| Comprehensive Hooks | Claude Code | useCanUseTool, useTypeahead, useScheduledTasks 等 |

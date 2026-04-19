@@ -56,7 +56,7 @@ function parseCommandPaths(command: string): {
 
   // Match quoted and unquoted paths
   // eslint-disable-next-line no-useless-escape
-  const pathRegex = /(['"])([^\1]+?)\1|([\.\/\~a-zA-Z0-9_\-@\/\*][^\s\\]*) /g
+  const pathRegex = /(['"])((?:(?!\1)[^\\])+)\1|([\.\/\~a-zA-Z0-9_\-@\/\*][^\s\\]*) /g
 
   let match
   while ((match = pathRegex.exec(command)) !== null) {

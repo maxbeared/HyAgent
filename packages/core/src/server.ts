@@ -534,7 +534,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     const session = dbGetSession(id)
     if (!session) return c.json({ error: 'Session not found' }, 404)
     const body = await c.req.json()
-    const message = { id: `msg_${Date.now()}`, role: body.role ?? 'user', content: body.content ?? '', timestamp: Date.now() }
+    const message = { id: `msg_${Date.now()}`, role: body.role ?? 'user', parts: [{ type: 'text' as const, content: body.content ?? '' }], timestamp: Date.now() }
     session.messages.push(message)
     session.updatedAt = Date.now()
     dbUpdateSessionMessages(id, session.messages, session.updatedAt)
@@ -587,7 +587,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
       session.messages.push({
         id: `msg_${Date.now()}`,
         role: 'assistant',
-        content: result.content,
+        parts: [{ type: 'text' as const, content: result.content }],
         timestamp: Date.now(),
       })
     }
@@ -698,7 +698,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
       const textContent = data.content?.find((b: any) => b.type === 'text')
       const content = textContent?.text ?? '[No text response]'
 
-      const msg = { id: `msg_${Date.now()}`, role: 'assistant', content, timestamp: Date.now() }
+      const msg = { id: `msg_${Date.now()}`, role: 'assistant' as const, parts: [{ type: 'text' as const, content }], timestamp: Date.now() }
       if (sessionId) {
         const session = dbGetSession(sessionId)
         if (session) {
@@ -725,17 +725,19 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     if (!content) return c.json({ error: 'content is required' }, 400)
 
     // Convert session messages to the format expected by runAgentLoop
-    const history: Message[] = session.messages.map((m: any) => ({
+    const history = session.messages.map((m: any) => ({
+      id: m.id ?? `msg_${Date.now()}`,
       role: m.role,
-      content: typeof m.content === 'string' ? m.content : m.content,
+      parts: Array.isArray(m.parts) ? m.parts : m.parts ? [m.parts] : [{ type: 'text' as const, content: m.content ?? '' }],
+      timestamp: m.timestamp ?? Date.now(),
     }))
 
     // Add user message to session
-    const userMsg = { id: `msg_${Date.now()}`, role: 'user' as const, content, timestamp: Date.now() }
+    const userMsg = { id: `msg_${Date.now()}`, role: 'user' as const, parts: [{ type: 'text' as const, content }], timestamp: Date.now() }
     session.messages.push(userMsg)
 
     // Run agent loop with session history
-    const result = await runAgentLoop(content, agentCfg(), maxIterations ?? 30, history, undefined, session.id)
+    const result = await runAgentLoop(content, agentCfg(), maxIterations ?? 30, history as any, undefined, session.id)
 
     // Append assistant messages from the loop to session
     // The loop returned the result; we need to add the assistant turn(s)
@@ -744,7 +746,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
       session.messages.push({
         id: `msg_${Date.now()}`,
         role: 'assistant',
-        content: result.content,
+        parts: [{ type: 'text' as const, content: result.content }],
         timestamp: Date.now(),
       })
     }
@@ -771,24 +773,26 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     const task = c.req.query('task') ?? c.req.query('content')
     if (!task) return c.json({ error: 'task or content query param is required' }, 400)
 
-    const history: Message[] = session.messages.map((m: any) => ({
+    const history = session.messages.map((m: any) => ({
+      id: m.id ?? `msg_${Date.now()}`,
       role: m.role,
-      content: typeof m.content === 'string' ? m.content : m.content,
+      parts: Array.isArray(m.parts) ? m.parts : m.parts ? [m.parts] : [{ type: 'text' as const, content: m.content ?? '' }],
+      timestamp: m.timestamp ?? Date.now(),
     }))
 
-    const userMsg = { id: `msg_${Date.now()}`, role: 'user' as const, content: task, timestamp: Date.now() }
+    const userMsg = { id: `msg_${Date.now()}`, role: 'user' as const, parts: [{ type: 'text' as const, content: task }], timestamp: Date.now() }
     session.messages.push(userMsg)
     session.updatedAt = Date.now()
 
     return streamSSE(c, async stream => {
-      for await (const event of runAgentLoopStream(task, agentCfg(), 30, history, undefined, session.id)) {
+      for await (const event of runAgentLoopStream(task, agentCfg(), 30, history as any, undefined, session.id)) {
         await stream.writeSSE({ data: JSON.stringify(event) })
         // On completion, append the assistant message to session
         if (event.type === 'done' && event.content) {
           session.messages.push({
             id: `msg_${Date.now()}`,
             role: 'assistant',
-            content: event.content,
+            parts: [{ type: 'text' as const, content: event.content }],
             timestamp: Date.now(),
           })
           // Persist to SQLite after stream completes

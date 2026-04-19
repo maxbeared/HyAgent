@@ -276,3 +276,6 @@ export const AGGRESSIVE_COMPACTION_CONFIG: CompactionConfig = {
   maxMessages: 500,
   minTurnsBetweenCompaction: 20,
 }
+
+// Re-export SessionServiceTag for external use
+export { SessionServiceTag } from './types.js'

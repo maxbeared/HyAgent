@@ -103,7 +103,7 @@ export const PermissionServiceLayer = Layer.effect(
     const pendingRequests = new Map<string, PermissionRequest>()
     const approvedRules = new Map<string, Rule>()
 
-    return PermissionService.of({
+    return {
       check(input) {
         return Effect.sync(() => {
           const result = runPermissionPipeline({
@@ -117,7 +117,7 @@ export const PermissionServiceLayer = Layer.effect(
             behavior: result.behavior,
             reason: result.reason,
             updatedInput: result.updatedInput,
-            rule: result.rule,
+            rule: result.rule as any,
           }
         })
       },
@@ -166,7 +166,7 @@ export const PermissionServiceLayer = Layer.effect(
       mergeRules(...rulesets) {
         return Effect.sync(() => mergeRulesets(...rulesets))
       },
-    })
+    }
   })
 )
 
@@ -308,7 +308,7 @@ export const defaultExploreRuleset: Ruleset = [
 // Export
 // ============================================================================
 
-export { PermissionService, PermissionContext, Rule, Ruleset } from './types.js'
+export { PermissionContext, Rule, Ruleset } from './types.js'
 export { SandboxManager, sandboxManager } from './sandbox.js'
 export { validatePathSafety, validateCommandPaths } from './pathValidation.js'
 export { evaluate } from './evaluate.js'

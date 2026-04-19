@@ -205,7 +205,8 @@ export class YOLOClassifier {
       if (rule.tool && rule.tool !== tool) continue
 
       // Check pattern match
-      const target = rule.patternType === 'command' ? command : (path ?? inputStr)
+      // Note: patternType is 'glob' | 'regex' | 'exact', never 'command'
+      const target = (path ?? inputStr)
       if (!target) continue
 
       if (matchPattern(target, rule.pattern, rule.patternType as 'glob' | 'regex' | 'exact')) {

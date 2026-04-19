@@ -11,15 +11,9 @@
  * - Token usage tracking
  */
 
-export interface Message {
-  role: 'user' | 'assistant'
-  content: any
-  // OpenCode-style metadata
-  time?: {
-    created?: number
-    compacted?: boolean
-  }
-}
+import { type Message } from '../session/types.js'
+
+export type { Message }
 
 interface CompactionConfig {
   baseUrl: string
@@ -122,23 +116,14 @@ export function getCompactionUrgency(
 }
 
 /**
- * Check if a message should be protected from compaction
- */
-function isProtectedMessage(message: Message): boolean {
-  // Protect recent messages within token budget
-  return true // We'll handle this in the main compaction logic
-}
-
-/**
  * Check if a message is from a protected tool
  */
 function isProtectedToolMessage(message: Message): boolean {
   if (message.role !== 'assistant') return false
-  if (typeof message.content !== 'object' || !Array.isArray(message.content)) return false
 
-  for (const block of message.content) {
-    if (block.type === 'tool_use') {
-      return PRUNE_PROTECTED_TOOLS.includes(block.name)
+  for (const part of message.parts) {
+    if (part.type === 'tool_use') {
+      return PRUNE_PROTECTED_TOOLS.includes(part.tool)
     }
   }
   return false
@@ -148,22 +133,11 @@ function formatMessagesForSummary(messages: Message[]): string {
   return messages
     .map(m => {
       const role = m.role.toUpperCase()
-      let content: string
-
-      if (typeof m.content === 'string') {
-        content = m.content
-      } else if (Array.isArray(m.content)) {
-        content = m.content
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text)
-            .join('\n')
-      } else {
-        content = JSON.stringify(m.content)
-      }
-
-      // Mark if this was compacted
-      const compacted = m.time?.compacted ? '[COMPACTED] ' : ''
-      return `[${role}]: ${compacted}${content}`
+      const content = m.parts
+          .filter((b) => b.type === 'text')
+          .map((b) => b.content)
+          .join('\n')
+      return `[${role}]: ${content}`
     })
     .join('\n\n')
 }
@@ -223,10 +197,7 @@ export async function compactMessages(
     }
 
     // Mark older messages for summarization
-    toSummarize.unshift({
-      ...msg,
-      time: { ...msg.time, compacted: true },
-    })
+    toSummarize.unshift({ ...msg })
   }
 
   // If we have few messages to summarize, just keep them all
@@ -280,9 +251,13 @@ Provide a clear, structured summary that will allow the conversation to continue
     const summaryText = data.content?.find((b: any) => b.type === 'text')?.text ?? 'Conversation history compacted.'
 
     const summaryMessage: Message = {
+      id: crypto.randomUUID(),
       role: 'user',
-      content: `[CONTEXT SUMMARY - Previous conversation compacted]\n\n${summaryText}\n\n[END OF SUMMARY - ${toSummarize.length} messages compacted - recent tool results preserved]`,
-      time: { created: Date.now() },
+      parts: [{
+        type: 'text',
+        content: `[CONTEXT SUMMARY - Previous conversation compacted]\n\n${summaryText}\n\n[END OF SUMMARY - ${toSummarize.length} messages compacted - recent tool results preserved]`,
+      }],
+      timestamp: Date.now(),
     }
 
     console.log(`[Compaction] Reduced ${messages.length} messages: ${toSummarize.length} summarized, ${protectedMessages.length} preserved`)

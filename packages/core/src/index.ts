@@ -101,7 +101,6 @@ export type {
   Metadata,
   PermissionResult as ToolPermissionResult,
   SandboxContext,
-  SandboxManager,
   ToolRegistry,
 } from './tool/tool.js'
 

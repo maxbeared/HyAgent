@@ -81,6 +81,7 @@ export function createSkillTool(): ToolDef<typeof SkillToolInputSchema, SkillMet
  * Skill tool metadata
  */
 export interface SkillMetadata {
+  [key: string]: unknown
   skill: string
   context?: 'inline' | 'fork'
   success: boolean

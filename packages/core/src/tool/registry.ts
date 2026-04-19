@@ -6,6 +6,9 @@
 
 import { Effect, Layer, Context } from 'effect'
 import type { ToolDef, ToolRegistry, ToolContext } from './tool.js'
+import { ToolRegistryTag } from './tool.js'
+
+export { ToolRegistryTag }
 import { BashTool } from './bash.js'
 import { ReadTool } from './read.js'
 import { EditTool } from './edit.js'
@@ -23,7 +26,7 @@ export const ToolRegistryImpl = Effect.gen(function* () {
     tools.set(tool.id, tool)
   }
 
-  return ToolRegistry.of({
+  return {
     register(tool) {
       return Effect.sync(() => {
         tools.set(tool.id, tool)
@@ -50,7 +53,7 @@ export const ToolRegistryImpl = Effect.gen(function* () {
         return Array.from(tools.values())
       })
     },
-  })
+  }
 })
 
 /**

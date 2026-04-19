@@ -86,6 +86,7 @@ export interface WebSearchResult {
  * Web search metadata
  */
 export interface WebSearchMetadata {
+  [key: string]: unknown
   query: string
   resultCount?: number
   durationMs: number

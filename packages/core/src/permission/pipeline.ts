@@ -338,8 +338,8 @@ export function pipelineToResult(stepResult: PipelineStepResult): PermissionResu
   return {
     behavior: stepResult.behavior,
     reason: stepResult.reason,
-    rule: stepResult.rule,
     updatedInput: stepResult.updatedInput,
+    rule: stepResult.rule ? stepResult.rule as any : undefined,
   }
 }
 

@@ -82,6 +82,7 @@ export interface WebFetchResult {
  * Web fetch metadata
  */
 export interface WebFetchMetadata {
+  [key: string]: unknown
   url: string
   title?: string
   contentLength?: number

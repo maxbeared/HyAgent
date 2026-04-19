@@ -124,12 +124,10 @@ export class MCPClientImpl implements MCPClient {
       headers['Authorization'] = authHeader
     }
 
-    const transport = new StreamableHTTPClientTransport({
-      url: new URL(this.config.url),
-      requestOptions: {
-        headers,
-      },
-    })
+    const transport = new StreamableHTTPClientTransport(
+      new URL(this.config.url),
+      { requestInit: { headers } }
+    )
 
     this.client = new Client({
       name: 'hybrid-agent',
