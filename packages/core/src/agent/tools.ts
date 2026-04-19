@@ -13,6 +13,7 @@ import { promisify } from 'util'
 import { glob } from 'glob'
 import { Effect } from 'effect'
 import { checkCommandSafety, checkPathSafety } from '../permission.js'
+import { getPluginRegistry } from '../plugin/index.js'
 
 const execAsync = promisify(exec)
 
@@ -196,21 +197,94 @@ export const TOOL_DEFINITIONS = [
   },
 ]
 
-async function executeBash(input: { command: string; cwd?: string; timeout?: number }): Promise<ToolResult> {
+/**
+ * Agent types for tool filtering
+ */
+export type AgentType = 'default' | 'research' | 'coding' | 'review' | 'exploration'
+
+/**
+ * Tool filter configuration by agent type
+ */
+const AGENT_TOOL_FILTERS: Record<AgentType, string[]> = {
+  // Default agent has all tools
+  default: [],
+  // Research agent has limited tools (no file modification)
+  research: ['read', 'glob', 'grep', 'websearch', 'webfetch'],
+  // Coding agent has all tools
+  coding: [],
+  // Review agent has read-only + task tools
+  review: ['read', 'glob', 'grep', 'task', 'task_result', 'task_list'],
+  // Exploration agent has web + read tools
+  exploration: ['read', 'glob', 'grep', 'websearch', 'webfetch', 'task', 'task_result', 'task_list'],
+}
+
+/**
+ * Get tool definitions, processed through plugin hooks.
+ * Optionally filter by agent type.
+ *
+ * @param agentType - Filter tools by agent type
+ */
+export async function getToolDefinitions(agentType: AgentType = 'default'): Promise<typeof TOOL_DEFINITIONS[number][]> {
+  const registry = getPluginRegistry()
+  let tools = TOOL_DEFINITIONS
+
+  // Apply agent-specific filtering
+  const allowedTools = AGENT_TOOL_FILTERS[agentType]
+  if (allowedTools.length > 0) {
+    tools = tools.filter((tool) => allowedTools.includes(tool.name))
+  }
+
+  return registry.processToolDefinitions(tools)
+}
+
+/**
+ * Get available agent types
+ */
+export function getAgentTypes(): AgentType[] {
+  return ['default', 'research', 'coding', 'review', 'exploration']
+}
+
+/**
+ * Check if a tool is available for an agent type
+ */
+export function isToolAvailableForAgent(toolName: string, agentType: AgentType): boolean {
+  const allowedTools = AGENT_TOOL_FILTERS[agentType]
+  if (allowedTools.length === 0) return true  // Empty means all allowed
+  return allowedTools.includes(toolName)
+}
+
+async function executeBash(input: { command: string; cwd?: string; timeout?: number }, signal?: AbortSignal): Promise<ToolResult> {
   const safety = checkCommandSafety(input.command)
   if (!safety.isSafe) {
     return { output: `Command blocked: ${safety.reasons.join('; ')}`, success: false }
   }
+
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   try {
-    const { stdout, stderr } = await execAsync(input.command, {
-      cwd: input.cwd || process.cwd(),
-      timeout: input.timeout ?? 30000,
-      maxBuffer: 10 * 1024 * 1024, // 10MB
-    })
+    // Create a promise that wraps execAsync with abort support
+    const { stdout, stderr } = await Promise.race([
+      execAsync(input.command, {
+        cwd: input.cwd || process.cwd(),
+        timeout: input.timeout ?? 30000,
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+      }),
+      new Promise<never>((_, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new Error('Execution cancelled'))
+        })
+      }),
+    ])
     const output = [stdout, stderr].filter(Boolean).join('\n').trim()
     const truncated = output.length > MAX_TOOL_OUTPUT
     return { output: truncateOutput(output), success: true, truncated }
   } catch (e: any) {
+    if (e.message === 'Execution cancelled') {
+      return { output: 'Execution cancelled', success: false }
+    }
     // execAsync throws with { code, stdout, stderr } on non-zero exit
     const exitCode = e.code ?? 'unknown'
     const stderrOutput = e.stderr?.trim() || ''
@@ -222,7 +296,12 @@ async function executeBash(input: { command: string; cwd?: string; timeout?: num
   }
 }
 
-async function executeRead(input: { path: string; offset?: number; limit?: number }): Promise<ToolResult> {
+async function executeRead(input: { path: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   // Expand ~ to user home directory
   const resolvedPath = input.path.startsWith('~/')
     ? input.path.replace(/^~\//, (process.env.USERPROFILE || process.env.HOME || '').replace(/\\/g, '/') + '/')
@@ -245,7 +324,12 @@ async function executeRead(input: { path: string; offset?: number; limit?: numbe
   }
 }
 
-async function executeWrite(input: { path: string; content: string }): Promise<ToolResult> {
+async function executeWrite(input: { path: string; content: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   // Expand ~ to user home directory
   const resolvedPath = input.path.startsWith('~/')
     ? input.path.replace(/^~\//, (process.env.USERPROFILE || process.env.HOME || '').replace(/\\/g, '/') + '/')
@@ -264,7 +348,12 @@ async function executeWrite(input: { path: string; content: string }): Promise<T
   }
 }
 
-async function executeEdit(input: { path: string; old_string: string; new_string: string }): Promise<ToolResult> {
+async function executeEdit(input: { path: string; old_string: string; new_string: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   // Expand ~ to user home directory
   const resolvedPath = input.path.startsWith('~/')
     ? input.path.replace(/^~\//, (process.env.USERPROFILE || process.env.HOME || '').replace(/\\/g, '/') + '/')
@@ -286,7 +375,12 @@ async function executeEdit(input: { path: string; old_string: string; new_string
   }
 }
 
-async function executeGlob(input: { pattern: string; cwd?: string }): Promise<ToolResult> {
+async function executeGlob(input: { pattern: string; cwd?: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   try {
     const matches = await glob(input.pattern, {
       cwd: input.cwd || process.cwd(),
@@ -301,7 +395,11 @@ async function executeGlob(input: { pattern: string; cwd?: string }): Promise<To
   }
 }
 
-async function executeGrep(input: { pattern: string; path?: string; include?: string }): Promise<ToolResult> {
+async function executeGrep(input: { pattern: string; path?: string; include?: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
   const searchPath = input.path || '.'
   const safety = checkPathSafety(searchPath)
   if (!safety.isSafe) {
@@ -320,7 +418,12 @@ async function executeGrep(input: { pattern: string; path?: string; include?: st
   }
 }
 
-async function executeWebSearch(input: { query: string; limit?: number }): Promise<ToolResult> {
+async function executeWebSearch(input: { query: string; limit?: number }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   const { duckduckgoSearch } = await import('../tool/websearch.js')
   try {
     const results = await duckduckgoSearch(input.query, input.limit ?? 5)
@@ -333,7 +436,12 @@ async function executeWebSearch(input: { query: string; limit?: number }): Promi
   }
 }
 
-async function executeWebFetch(input: { url: string; maxLength?: number }): Promise<ToolResult> {
+async function executeWebFetch(input: { url: string; maxLength?: number }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   const { defaultWebFetch } = await import('../tool/webfetch.js')
   try {
     const result = await defaultWebFetch(input.url, input.maxLength ?? 10000)
@@ -346,7 +454,7 @@ async function executeWebFetch(input: { url: string; maxLength?: number }): Prom
   }
 }
 
-async function executeTask(input: { task: string; description?: string }): Promise<ToolResult> {
+async function executeTask(input: { task: string; description?: string }, signal?: AbortSignal): Promise<ToolResult> {
   const { getTaskStore } = await import('../tool/task.js')
   try {
     const store = getTaskStore()
@@ -360,7 +468,12 @@ async function executeTask(input: { task: string; description?: string }): Promi
   }
 }
 
-async function executeTaskResult(input: { taskId: string }): Promise<ToolResult> {
+async function executeTaskResult(input: { taskId: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   const { getTaskStore } = await import('../tool/task.js')
   try {
     const store = getTaskStore()
@@ -388,7 +501,11 @@ async function executeTaskResult(input: { taskId: string }): Promise<ToolResult>
   }
 }
 
-async function executeTaskList(_input: Record<string, never>): Promise<ToolResult> {
+async function executeTaskList(_input: Record<string, never>, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
   const { getTaskStore } = await import('../tool/task.js')
   try {
     const store = getTaskStore()
@@ -408,7 +525,12 @@ async function executeTaskList(_input: Record<string, never>): Promise<ToolResul
   }
 }
 
-async function executeNotebook(input: { path: string; operation: string; cell_index?: number; cell_type?: string; source?: string }): Promise<ToolResult> {
+async function executeNotebook(input: { path: string; operation: string; cell_index?: number; cell_type?: string; source?: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   const { parseNotebook, writeNotebook, createEmptyNotebook } = await import('../tool/notebook.js')
   const { existsSync } = await import('fs')
 
@@ -481,7 +603,12 @@ async function executeNotebook(input: { path: string; operation: string; cell_in
   }
 }
 
-async function executeSkill(input: { skill: string; args?: string }): Promise<ToolResult> {
+async function executeSkill(input: { skill: string; args?: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
   const { getSkillService } = await import('../skill/service.js')
   try {
     const service = getSkillService()
@@ -502,21 +629,21 @@ async function executeSkill(input: { skill: string; args?: string }): Promise<To
   }
 }
 
-export async function executeTool(name: string, input: any): Promise<ToolResult> {
+export async function executeTool(name: string, input: any, signal?: AbortSignal): Promise<ToolResult> {
   switch (name) {
-    case 'bash': return executeBash(input)
-    case 'read': return executeRead(input)
-    case 'write': return executeWrite(input)
-    case 'edit': return executeEdit(input)
-    case 'glob': return executeGlob(input)
-    case 'grep': return executeGrep(input)
-    case 'websearch': return executeWebSearch(input)
-    case 'webfetch': return executeWebFetch(input)
-    case 'task': return executeTask(input)
-    case 'task_result': return executeTaskResult(input)
-    case 'task_list': return executeTaskList(input)
-    case 'notebook': return executeNotebook(input)
-    case 'skill': return executeSkill(input)
+    case 'bash': return executeBash(input, signal)
+    case 'read': return executeRead(input, signal)
+    case 'write': return executeWrite(input, signal)
+    case 'edit': return executeEdit(input, signal)
+    case 'glob': return executeGlob(input, signal)
+    case 'grep': return executeGrep(input, signal)
+    case 'websearch': return executeWebSearch(input, signal)
+    case 'webfetch': return executeWebFetch(input, signal)
+    case 'task': return executeTask(input, signal)
+    case 'task_result': return executeTaskResult(input, signal)
+    case 'task_list': return executeTaskList(input, signal)
+    case 'notebook': return executeNotebook(input, signal)
+    case 'skill': return executeSkill(input, signal)
     default: return { output: `Unknown tool: ${name}`, success: false }
   }
 }
@@ -527,43 +654,76 @@ export async function executeTool(name: string, input: any): Promise<ToolResult>
  * - non-safe tools run sequentially within their group
  * Returns results in the same order as input tool calls.
  *
+ * Supports AbortSignal for cancellation.
+ *
  * Strategy: partition into concurrent and sequential groups,
  * run concurrent group fully in parallel, then sequential one by one.
  */
 export async function executeToolCallsConcurrently(
   toolCalls: Array<{ id: string; name: string; input: any }>,
+  signal?: AbortSignal,
 ): Promise<Array<{ id: string; name: string; result: ToolResult }>> {
-  const concurrent: typeof toolCalls = []
-  const sequential: typeof toolCalls = []
-
-  for (const tc of toolCalls) {
-    if (CONCURRENT_SAFE_TOOLS.has(tc.name)) {
-      concurrent.push(tc)
-    } else {
-      sequential.push(tc)
-    }
-  }
-
-  // Run concurrent tools in parallel
-  const concurrentResults = await Promise.all(
-    concurrent.map(async tc => ({
+  // Check if already aborted
+  if (signal?.aborted) {
+    return toolCalls.map(tc => ({
       id: tc.id,
       name: tc.name,
-      result: await executeTool(tc.name, tc.input),
+      result: { output: 'Execution cancelled', success: false } as ToolResult,
     }))
-  )
-
-  // Run sequential tools one by one
-  const sequentialResults: typeof concurrentResults = []
-  for (const tc of sequential) {
-    sequentialResults.push({
-      id: tc.id,
-      name: tc.name,
-      result: await executeTool(tc.name, tc.input),
-    })
   }
 
-  // Merge and preserve original order
-  const allResults = [...concurrentResults, ...sequentialResults]
-  return toolCalls.map(tc => allResults.find(r => r.id === tc.id)!)
+  // Create abort listener
+  const abortHandler = () => {
+    // Tools should check signal.aborted during execution
+  }
+  signal?.addEventListener('abort', abortHandler)
+
+  try {
+    const concurrent: typeof toolCalls = []
+    const sequential: typeof toolCalls = []
+
+    for (const tc of toolCalls) {
+      if (CONCURRENT_SAFE_TOOLS.has(tc.name)) {
+        concurrent.push(tc)
+      } else {
+        sequential.push(tc)
+      }
+    }
+
+    // Helper to check abort
+    const checkAbort = () => {
+      if (signal?.aborted) {
+        throw new Error('Execution cancelled')
+      }
+    }
+
+    // Run concurrent tools in parallel
+    const concurrentResults = await Promise.all(
+      concurrent.map(async tc => {
+        checkAbort()
+        return {
+          id: tc.id,
+          name: tc.name,
+          result: await executeTool(tc.name, tc.input, signal),
+        }
+      })
+    )
+
+    // Run sequential tools one by one
+    const sequentialResults: typeof concurrentResults = []
+    for (const tc of sequential) {
+      checkAbort()
+      sequentialResults.push({
+        id: tc.id,
+        name: tc.name,
+        result: await executeTool(tc.name, tc.input, signal),
+      })
+    }
+
+    // Merge and preserve original order
+    const allResults = [...concurrentResults, ...sequentialResults]
+    return toolCalls.map(tc => allResults.find(r => r.id === tc.id)!)
+  } finally {
+    signal?.removeEventListener('abort', abortHandler)
+  }
 }

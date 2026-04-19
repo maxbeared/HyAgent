@@ -42,7 +42,9 @@ function initDatabase(): Database.Database {
       provider TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      metadata TEXT DEFAULT '{}'
+      metadata TEXT DEFAULT '{}',
+      parent_id TEXT,
+      fork_count INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS checkpoints (
@@ -59,7 +61,20 @@ function initDatabase(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at);
     CREATE INDEX IF NOT EXISTS idx_checkpoints_created ON checkpoints(created_at);
+    CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
   `)
+
+  // Migrate: add parent_id and fork_count columns if they don't exist (backward compatibility)
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN parent_id TEXT`)
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN fork_count INTEGER DEFAULT 0`)
+  } catch {
+    // Column already exists
+  }
 
   return db
 }
@@ -102,6 +117,8 @@ export interface DbSession {
   created_at: number
   updated_at: number
   metadata: string // JSON string
+  parent_id: string | null
+  fork_count: number
 }
 
 export interface DbCheckpoint {
@@ -154,6 +171,8 @@ export function dbGetSession(id: string): Session | undefined {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    parentId: row.parent_id ?? undefined,
+    forkCount: row.fork_count,
   }
 }
 
@@ -227,7 +246,138 @@ export function dbListSessions(): Session[] {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    parentId: row.parent_id ?? undefined,
+    forkCount: row.fork_count,
   }))
+}
+
+// ============================================================================
+// Fork Operations
+// ============================================================================
+
+/**
+ * Fork a session - create a new session with messages copied up to messageID
+ * Returns the new session and ID mapping for messages
+ */
+export function dbForkSession(
+  parentId: string,
+  messages: Message[],
+  messageID?: string
+): { session: Session; idMapping: Map<string, string> } {
+  const db = getDatabase()
+
+  // Get parent session to copy metadata
+  const parent = dbGetSession(parentId)
+  if (!parent) {
+    throw new Error(`Parent session not found: ${parentId}`)
+  }
+
+  // Calculate fork count
+  const forkCount = (parent.forkCount ?? 0) + 1
+
+  // Generate new session ID
+  const newId = `session_${Array.from({ length: 8 }, () =>
+    Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
+  ).join('')}`
+
+  // Clone messages and create ID mapping
+  const idMapping = new Map<string, string>()
+  const clonedMessages: Message[] = []
+
+  for (const msg of messages) {
+    // Stop at messageID if specified
+    if (messageID && msg.id === messageID) {
+      clonedMessages.push({ ...msg })
+      const newMsgId = `msg_${clonedMessages.length - 1}`
+      idMapping.set(msg.id, newMsgId)
+      break
+    }
+
+    // Clone message with new ID
+    const newMsgId = `msg_${clonedMessages.length}`
+    idMapping.set(msg.id, newMsgId)
+    clonedMessages.push({ ...msg })
+  }
+
+  const now = Date.now()
+  const newSession: Session = {
+    id: newId,
+    messages: clonedMessages,
+    model: parent.model,
+    provider: parent.provider,
+    createdAt: now,
+    updatedAt: now,
+    metadata: { ...parent.metadata },
+    parentId: parentId,
+    forkCount: 0, // New fork has 0 forks itself
+  }
+
+  // Insert new session
+  const stmt = db.prepare(`
+    INSERT INTO sessions (id, messages, model, provider, created_at, updated_at, metadata, parent_id, fork_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  stmt.run(
+    newSession.id,
+    JSON.stringify(newSession.messages),
+    newSession.model ?? null,
+    newSession.provider ?? null,
+    newSession.createdAt,
+    newSession.updatedAt,
+    JSON.stringify(newSession.metadata),
+    newSession.parentId ?? null,
+    newSession.forkCount
+  )
+
+  // Increment parent's fork count
+  dbIncrementForkCount(parentId, forkCount)
+
+  return { session: newSession, idMapping }
+}
+
+/**
+ * Increment the fork count of a session
+ */
+function dbIncrementForkCount(sessionId: string, count: number): void {
+  const db = getDatabase()
+  const stmt = db.prepare('UPDATE sessions SET fork_count = ?, updated_at = ? WHERE id = ?')
+  stmt.run(count, Date.now(), sessionId)
+}
+
+/**
+ * Get all child sessions (forks) of a session
+ */
+export function dbGetChildSessions(parentId: string): Session[] {
+  const db = getDatabase()
+  const stmt = db.prepare('SELECT * FROM sessions WHERE parent_id = ? ORDER BY created_at DESC')
+  const rows = stmt.all(parentId) as DbSession[]
+
+  return rows.map((row) => ({
+    id: row.id,
+    messages: JSON.parse(row.messages) as Message[],
+    model: row.model ?? undefined,
+    provider: row.provider ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    parentId: row.parent_id ?? undefined,
+    forkCount: row.fork_count,
+  }))
+}
+
+/**
+ * Get session fork info (parent and children)
+ */
+export function dbGetForkInfo(sessionId: string): { parent?: Session; children: Session[] } {
+  const session = dbGetSession(sessionId)
+  if (!session) {
+    throw new Error(`Session not found: ${sessionId}`)
+  }
+
+  return {
+    parent: session.parentId ? dbGetSession(session.parentId) : undefined,
+    children: dbGetChildSessions(sessionId),
+  }
 }
 
 // ============================================================================

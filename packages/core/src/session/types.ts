@@ -44,6 +44,8 @@ export interface Session {
   createdAt: number
   updatedAt: number
   metadata?: Record<string, unknown>
+  parentId?: string // Fork source session ID
+  forkCount?: number // Number of times this session has been forked
 }
 
 // ============================================================================
@@ -120,6 +122,19 @@ export interface SessionService {
    * List all sessions
    */
   list(): Effect.Effect<Session[]>
+
+  /**
+   * Fork a session from a specific message point
+   */
+  fork(sessionID: string, messageID?: string): Effect.Effect<Session>
+}
+
+/**
+ * Fork result contains the new session and ID mapping
+ */
+export interface ForkResult {
+  session: Session
+  idMapping: Map<string, string> // original message ID -> new message ID
 }
 
 /**

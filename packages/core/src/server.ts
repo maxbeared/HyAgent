@@ -46,6 +46,8 @@ import {
   dbUpdateSessionMessages,
   dbDeleteSession,
   dbListSessions,
+  dbForkSession,
+  dbGetChildSessions,
 } from './session/db.js'
 import { getMCPServerManager, type MCPServerConfig } from './mcp/index.js'
 import { getPluginRegistry, loadPlugin, type PluginLoadOptions } from './plugin/index.js'
@@ -59,6 +61,8 @@ interface Session {
   provider?: string
   createdAt: number
   updatedAt: number
+  parentId?: string
+  forkCount?: number
 }
 
 interface Worker {
@@ -320,6 +324,56 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     }
   })
 
+  // ---- MCP OAuth ----
+
+  // Get OAuth status for an MCP server
+  app.get('/api/mcp/servers/:name/auth', c => {
+    const name = c.req.param('name')
+    try {
+      const status = mcp.getAuthStatus(name)
+      return c.json(status)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // Start OAuth flow
+  app.post('/api/mcp/servers/:name/auth/start', async c => {
+    const name = c.req.param('name')
+    try {
+      const { authUrl } = await mcp.startAuth(name)
+      return c.json({ authUrl })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // Complete OAuth flow with code
+  app.post('/api/mcp/servers/:name/auth/callback', async c => {
+    const name = c.req.param('name')
+    const { code } = await c.req.json()
+    if (!code) {
+      return c.json({ error: 'Authorization code is required' }, 400)
+    }
+    try {
+      await mcp.finishAuth(name, code)
+      return c.json({ success: true })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // Remove OAuth credentials
+  app.delete('/api/mcp/servers/:name/auth', c => {
+    const name = c.req.param('name')
+    try {
+      mcp.removeAuth(name)
+      return c.json({ success: true })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
   // List tools on an MCP server
   app.get('/api/mcp/servers/:name/tools', c => {
     const name = c.req.param('name')
@@ -429,6 +483,50 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
   app.delete('/api/sessions/:id', c => {
     dbDeleteSession(c.req.param('id'))
     return c.json({ success: true })
+  })
+
+  // ---- Session Fork ----
+
+  app.post('/api/sessions/:id/fork', c => {
+    const sessionId = c.req.param('id')
+    const session = dbGetSession(sessionId)
+    if (!session) {
+      return c.json({ error: 'Session not found' }, 404)
+    }
+
+    const { messageID } = c.req.query() ?? {}
+
+    // Fork messages up to messageID if specified
+    const messagesToFork = messageID
+      ? session.messages.slice(0, session.messages.findIndex((m) => m.id === messageID) + 1)
+      : session.messages
+
+    const { session: forkedSession } = dbForkSession(sessionId, messagesToFork, messageID)
+
+    return c.json({
+      id: forkedSession.id,
+      parentId: forkedSession.parentId,
+      forkCount: forkedSession.forkCount,
+      messageCount: forkedSession.messages.length,
+      createdAt: forkedSession.createdAt,
+    }, 201)
+  })
+
+  app.get('/api/sessions/:id/forks', c => {
+    const sessionId = c.req.param('id')
+    const session = dbGetSession(sessionId)
+    if (!session) {
+      return c.json({ error: 'Session not found' }, 404)
+    }
+
+    const children = dbGetChildSessions(sessionId)
+    return c.json(children.map(s => ({
+      id: s.id,
+      parentId: s.parentId,
+      forkCount: s.forkCount,
+      messageCount: s.messages.length,
+      createdAt: s.createdAt,
+    })))
   })
 
   app.post('/api/sessions/:id/messages', async c => {

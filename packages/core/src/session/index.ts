@@ -23,6 +23,8 @@ import {
   dbUpdateSessionMetadata,
   dbDeleteSession,
   dbListSessions,
+  dbForkSession,
+  dbGetChildSessions,
 } from './db.js'
 
 // ============================================================================
@@ -225,6 +227,28 @@ export const SessionServiceLayer = Layer.effect(
       list() {
         return Effect.gen(function* () {
           return yield* Effect.sync(() => dbListSessions())
+        })
+      },
+
+      fork(sessionID, messageID) {
+        return Effect.gen(function* () {
+          const session = yield* Effect.sync(() => dbGetSession(sessionID))
+
+          if (!session) {
+            return yield* Effect.fail(new Error(`Session not found: ${sessionID}`))
+          }
+
+          // Get messages up to messageID if specified
+          const messagesToFork = messageID
+            ? session.messages.slice(0, session.messages.findIndex((m) => m.id === messageID) + 1)
+            : session.messages
+
+          // Create fork
+          const { session: forkedSession } = yield* Effect.sync(() =>
+            dbForkSession(sessionID, messagesToFork, messageID)
+          )
+
+          return forkedSession
         })
       },
     })

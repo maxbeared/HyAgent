@@ -45,6 +45,86 @@ const DANGEROUS_COMMAND_PATTERNS = [
   { pattern: /curl.*\|.*sh/, reason: 'Download and execute pattern' },
 ]
 
+// ============================================================================
+// Zsh Dangerous Commands (from Claude Code bashSecurity.ts)
+// ============================================================================
+
+const ZSH_DANGEROUS_PATTERNS = [
+  { pattern: /zmodload\s+zsh\/mapfile/, reason: 'zsh mapfile module enables array-based file I/O' },
+  { pattern: /zmodload\s+zsh\/system/, reason: 'zsh system module enables sysopen/sysread/syswrite' },
+  { pattern: /sysopen\b/, reason: 'zsh sysopen command - direct file descriptor manipulation' },
+  { pattern: /sysread\b/, reason: 'zsh sysread command - direct file descriptor reading' },
+  { pattern: /syswrite\b/, reason: 'zsh syswrite command - direct file descriptor writing' },
+  { pattern: /zpty\b/, reason: 'zsh zpty command - PTY manipulation for command injection' },
+  { pattern: /ztcp\b/, reason: 'zsh ztcp command - network socket manipulation' },
+  { pattern: /mapfile\s+--/, reason: 'mapfile with flags can access arbitrary files' },
+  { pattern: /zf_open|zf_ls|zf_get|zf_put/, reason: 'zf_* commands - zsh FTP commands' },
+  { pattern: /emulate\s+-L\s+zsh/, reason: 'zsh emulate mode can reset security options' },
+]
+
+// ============================================================================
+// Brace Expansion Detection (from Claude Code bashSecurity.ts)
+// ============================================================================
+
+const BRACE_EXPANSION_PATTERN = /\{[^}]*\{[^}]*\}[^}]*\}/
+
+// ============================================================================
+// Obfuscated Flags Detection (from Claude Code bashSecurity.ts)
+// ============================================================================
+
+const OBFUSCATED_PATTERNS = [
+  // ANSI-C quoting: $'...'
+  { pattern: /\$\x27/, reason: 'ANSI-C quoting can hide characters' },
+  // Locale quoting: $"..."
+  { pattern: /\$\"/, reason: 'Locale quoting can hide characters' },
+  // Empty quote pairs adjacent: ""-f, ""-rf, etc.
+  { pattern: /""[-bcdfhnpstuvx]/, reason: 'Empty quote pairs can bypass flag detection' },
+  // Homogeneous empty quotes: """-f
+  { pattern: /"""-/, reason: 'Triple empty quotes can hide flags' },
+  // Quote chaining: "-""exec
+  { pattern: /"-""[a-z]+/, reason: 'Quote chaining can hide command names' },
+  // Three+ consecutive quotes at word start
+  { pattern: /^\s*['"]{3,}/, reason: 'Multiple consecutive quotes may hide command' },
+]
+
+// ============================================================================
+// Backslash Escaped Operators (parser differential attacks)
+// ============================================================================
+
+const BACKSLASH_ESCAPED_OPS = [
+  { pattern: /\\;/, reason: 'Escaped semicolon (\\;) parsed differently by shell vs normalized' },
+  { pattern: /\\\|/, reason: 'Escaped pipe (\\|) can bypass permission checks' },
+  { pattern: /\\&/, reason: 'Escaped ampersand (\\&) can bypass permission checks' },
+  { pattern: /\\</, reason: 'Escaped less-than (\\<) can bypass input redirection checks' },
+  { pattern: /\\>/, reason: 'Escaped greater-than (\\>) can bypass output redirection checks' },
+]
+
+// ============================================================================
+// IFS Injection Detection
+// ============================================================================
+
+const IFS_INJECTION_PATTERNS = [
+  { pattern: /IFS=/, reason: 'IFS variable manipulation can split tokens unexpectedly' },
+  { pattern: /IFS=:/, reason: 'IFS with colon can manipulate environment variable parsing' },
+  { pattern: /\$IFS/, reason: 'Direct $IFS variable reference for injection' },
+]
+
+// ============================================================================
+// Additional Dangerous Patterns
+// ============================================================================
+
+const ADDITIONAL_DANGEROUS_PATTERNS = [
+  // Process substitution: <(), >(), =()
+  { pattern: /<>\s*\(/, reason: 'Process substitution (<()) can hide command execution' },
+  { pattern: />>\s*\(/, reason: 'Process substitution (>() ) can hide output redirection' },
+  { pattern: /=\s*\(/, reason: 'Process substitution (=( )) for command substitution' },
+  // Here-doc with substitution: <<EOF ... EOF (with $var)
+  { pattern: /<<-?\s*['"]?\w+['"]?.*\$\{/, reason: 'Here-document with variable expansion' },
+  // Command substitution in redirection
+  { pattern: />\s*\$\(/, reason: 'Command substitution in output redirection' },
+  { pattern: /<\s*\$\(/, reason: 'Command substitution in input redirection' },
+]
+
 export function checkPathSafety(filePath: string): PathCheckResult {
   // UNC path blocking (Windows network paths - prevent NTLM leaks)
   if (filePath.startsWith('\\\\') || filePath.startsWith('//')) {
@@ -88,11 +168,42 @@ function extractPathsFromCommand(command: string): string[] {
 export function checkCommandSafety(command: string): CommandCheckResult {
   const reasons: string[] = []
 
+  // 1. Check basic dangerous command patterns
   for (const { pattern, reason } of DANGEROUS_COMMAND_PATTERNS) {
     if (pattern.test(command)) reasons.push(reason)
   }
 
-  // Check paths extracted from command
+  // 2. Check Zsh dangerous commands
+  for (const { pattern, reason } of ZSH_DANGEROUS_PATTERNS) {
+    if (pattern.test(command)) reasons.push(reason)
+  }
+
+  // 3. Check brace expansion
+  if (BRACE_EXPANSION_PATTERN.test(command)) {
+    reasons.push('Brace expansion can bypass argument parsing')
+  }
+
+  // 4. Check obfuscated flags
+  for (const { pattern, reason } of OBFUSCATED_PATTERNS) {
+    if (pattern.test(command)) reasons.push(reason)
+  }
+
+  // 5. Check backslash escaped operators
+  for (const { pattern, reason } of BACKSLASH_ESCAPED_OPS) {
+    if (pattern.test(command)) reasons.push(reason)
+  }
+
+  // 6. Check IFS injection
+  for (const { pattern, reason } of IFS_INJECTION_PATTERNS) {
+    if (pattern.test(command)) reasons.push(reason)
+  }
+
+  // 7. Check additional dangerous patterns
+  for (const { pattern, reason } of ADDITIONAL_DANGEROUS_PATTERNS) {
+    if (pattern.test(command)) reasons.push(reason)
+  }
+
+  // 8. Check paths extracted from command
   for (const filePath of extractPathsFromCommand(command)) {
     const check = checkPathSafety(filePath)
     if (!check.isSafe && check.reason) {
@@ -101,4 +212,13 @@ export function checkCommandSafety(command: string): CommandCheckResult {
   }
 
   return { isSafe: reasons.length === 0, reasons }
+}
+
+// Export validators for external use
+export const validators = {
+  checkZshDangerous: (cmd: string) => ZSH_DANGEROUS_PATTERNS.some(({ pattern }) => pattern.test(cmd)),
+  checkBraceExpansion: (cmd: string) => BRACE_EXPANSION_PATTERN.test(cmd),
+  checkObfuscatedFlags: (cmd: string) => OBFUSCATED_PATTERNS.some(({ pattern }) => pattern.test(cmd)),
+  checkBackslashEscaped: (cmd: string) => BACKSLASH_ESCAPED_OPS.some(({ pattern }) => pattern.test(cmd)),
+  checkIFSInjection: (cmd: string) => IFS_INJECTION_PATTERNS.some(({ pattern }) => pattern.test(cmd)),
 }

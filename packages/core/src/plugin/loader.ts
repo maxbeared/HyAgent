@@ -7,6 +7,7 @@
 import { Effect, Layer, Context } from 'effect'
 import type { Plugin, PluginRegistration, PluginHooks, PluginLoadOptions, HookContext } from './types.js'
 import { PluginManifestSchema } from './types.js'
+import type { ToolDef } from '../tool/tool.js'
 
 // ============================================================================
 // Errors
@@ -216,6 +217,33 @@ export class PluginRegistry {
         }
       }
     }
+  }
+
+  /**
+   * Process tool definitions through all onToolDefinition hooks.
+   * Each plugin can modify, add, or remove tool definitions.
+   *
+   * @param tools - Initial tool definitions
+   * @returns Modified tool definitions after all hooks have been applied
+   */
+  async processToolDefinitions(tools: any[]): Promise<any[]> {
+    let modifiedTools = [...tools]
+
+    for (const hooks of this.globalHooks) {
+      const hook = hooks.onToolDefinition
+      if (typeof hook === 'function') {
+        try {
+          const result = await hook(modifiedTools)
+          if (Array.isArray(result)) {
+            modifiedTools = result
+          }
+        } catch (err) {
+          console.error('Error in onToolDefinition hook:', err)
+        }
+      }
+    }
+
+    return modifiedTools
   }
 }
 

@@ -3,6 +3,7 @@
  *
  * 使用 @modelcontextprotocol/sdk 实现 MCP 客户端，
  * 支持 stdio、HTTP、SSE 三种传输方式。
+ * 支持 OAuth 认证。
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -11,6 +12,10 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
+  ListPromptsResultSchema,
+  GetPromptResultSchema,
+  ListResourcesResultSchema,
+  ReadResourceResultSchema,
   type Tool as MCPToolDefinition,
 } from '@modelcontextprotocol/sdk/types.js'
 import type {
@@ -18,9 +23,13 @@ import type {
   MCPServerConfig,
   MCPTool,
   MCPToolResult,
+  MCPPrompt,
+  MCPPromptResult,
+  MCPResource,
+  MCPResourceContent,
   MCPConnectionStatus,
 } from './types.js'
-import { spawn } from 'child_process'
+import { McpOAuthProvider, getMcpAuthManager } from './auth.js'
 
 /**
  * MCP Client implementation
@@ -30,9 +39,15 @@ export class MCPClientImpl implements MCPClient {
   private status: MCPConnectionStatus = 'disconnected'
   private errorMessage?: string
   private config: MCPServerConfig
+  private oauthProvider?: McpOAuthProvider
 
   constructor(config: MCPServerConfig) {
     this.config = config
+    // Initialize OAuth provider if needed
+    const authManager = getMcpAuthManager()
+    if (authManager.needsAuth(config)) {
+      this.oauthProvider = authManager.getProvider(config)
+    }
   }
 
   /**
@@ -46,6 +61,14 @@ export class MCPClientImpl implements MCPClient {
     this.status = 'connecting'
 
     try {
+      // Check if OAuth is needed
+      if (this.oauthProvider) {
+        const authStatus = this.oauthProvider.getAuthStatus()
+        if (authStatus.needsAuth && !authStatus.authUrl) {
+          throw new Error('OAuth authentication required but no auth URL available')
+        }
+      }
+
       if (this.config.command) {
         // Stdio transport
         await this.connectStdio()
@@ -94,8 +117,18 @@ export class MCPClientImpl implements MCPClient {
       throw new Error('URL is required for HTTP transport')
     }
 
+    // Build headers including OAuth token if available
+    const headers: Record<string, string> = {}
+    const authHeader = this.oauthProvider?.getAuthorizationHeader()
+    if (authHeader) {
+      headers['Authorization'] = authHeader
+    }
+
     const transport = new StreamableHTTPClientTransport({
       url: new URL(this.config.url),
+      requestOptions: {
+        headers,
+      },
     })
 
     this.client = new Client({
@@ -179,6 +212,117 @@ export class MCPClientImpl implements MCPClient {
         content: [],
         error: err instanceof Error ? err.message : String(err),
       }
+    }
+  }
+
+  /**
+   * List available prompts from the server
+   */
+  async listPrompts(): Promise<MCPPrompt[]> {
+    if (!this.client || this.status !== 'connected') {
+      throw new Error('Client not connected')
+    }
+
+    try {
+      const response = await this.client.request(
+        { method: 'prompts/list' },
+        ListPromptsResultSchema
+      )
+
+      return (response.prompts || []).map((prompt: any) => ({
+        name: prompt.name,
+        description: prompt.description,
+        arguments: prompt.arguments,
+      }))
+    } catch (err) {
+      // Server may not support prompts
+      console.warn('listPrompts not supported:', err)
+      return []
+    }
+  }
+
+  /**
+   * Get a prompt from the server
+   */
+  async getPrompt(name: string, args?: Record<string, unknown>): Promise<MCPPromptResult> {
+    if (!this.client || this.status !== 'connected') {
+      throw new Error('Client not connected')
+    }
+
+    try {
+      const response = await this.client.request(
+        {
+          method: 'prompts/get',
+          params: { name, arguments: args },
+        },
+        GetPromptResultSchema
+      )
+
+      return {
+        messages: response.messages.map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+      }
+    } catch (err) {
+      throw new Error(`Failed to get prompt ${name}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  /**
+   * List available resources from the server
+   */
+  async listResources(): Promise<MCPResource[]> {
+    if (!this.client || this.status !== 'connected') {
+      throw new Error('Client not connected')
+    }
+
+    try {
+      const response = await this.client.request(
+        { method: 'resources/list' },
+        ListResourcesResultSchema
+      )
+
+      return (response.resources || []).map((resource: any) => ({
+        uri: resource.uri,
+        name: resource.name,
+        description: resource.description,
+        mimeType: resource.mimeType,
+      }))
+    } catch (err) {
+      // Server may not support resources
+      console.warn('listResources not supported:', err)
+      return []
+    }
+  }
+
+  /**
+   * Read a resource from the server
+   */
+  async readResource(uri: string): Promise<MCPResourceContent> {
+    if (!this.client || this.status !== 'connected') {
+      throw new Error('Client not connected')
+    }
+
+    try {
+      const response = await this.client.request(
+        {
+          method: 'resources/read',
+          params: { uri },
+        },
+        ReadResourceResultSchema
+      )
+
+      return {
+        contents: response.contents.map((c: any) => ({
+          uri: c.uri,
+          mimeType: c.mimeType,
+          text: c.text,
+          blob: c.blob,
+        })),
+      }
+    } catch (err) {
+      throw new Error(`Failed to read resource ${uri}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

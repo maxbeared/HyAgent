@@ -25,6 +25,17 @@ export { createMCPClient, MCPClientImpl } from './client.js'
 // Re-export manager (synchronous, for use with Hono routes)
 export { MCPServerManager, getMCPServerManager } from './manager.js'
 
+// Re-export auth
+export {
+  McpAuthManager,
+  McpOAuthProvider,
+  getMcpAuthManager,
+  startOAuthCallbackServer,
+  type OAuthToken,
+  type StoredAuth,
+  type AuthStatus,
+} from './auth.js'
+
 // Re-export tool helpers (from tool/mcp.ts)
 export {
   createMCPTool,

@@ -20,6 +20,18 @@ export const MCPTransportTypeSchema = z.enum(['stdio', 'http', 'sse'])
 export type MCPTransportType = z.infer<typeof MCPTransportTypeSchema>
 
 /**
+ * OAuth configuration for MCP server
+ */
+export const MCPOAuthConfigSchema = z.object({
+  authUrl: z.string(),       // OAuth authorization URL
+  tokenUrl: z.string(),      // OAuth token URL
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  scope: z.string().optional(),
+})
+export type MCPOAuthConfig = z.infer<typeof MCPOAuthConfigSchema>
+
+/**
  * MCP Server configuration
  */
 export const MCPServerConfigSchema = z.object({
@@ -28,6 +40,7 @@ export const MCPServerConfigSchema = z.object({
   args: z.array(z.string()).optional(), // For stdio: command arguments
   env: z.record(z.string()).optional(), // For stdio: environment variables
   url: z.string().optional(),           // For http/sse: the server URL
+  oauth: MCPOAuthConfigSchema.optional(), // OAuth configuration
 })
 export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>
 
@@ -134,7 +147,93 @@ export interface MCPClient {
   callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult>
 
   /**
+   * List available prompts from the server
+   */
+  listPrompts(): Promise<MCPPrompt[]>
+
+  /**
+   * Get a prompt from the server
+   */
+  getPrompt(name: string, args?: Record<string, unknown>): Promise<MCPPromptResult>
+
+  /**
+   * List available resources from the server
+   */
+  listResources(): Promise<MCPResource[]>
+
+  /**
+   * Read a resource from the server
+   */
+  readResource(uri: string): Promise<MCPResourceContent>
+
+  /**
    * Get connection status
    */
   getStatus(): MCPConnectionStatus
+}
+
+// ============================================================================
+// MCP Prompts Types
+// ============================================================================
+
+/**
+ * MCP Prompt definition
+ */
+export interface MCPPrompt {
+  name: string
+  description?: string
+  arguments?: Array<{
+    name: string
+    description?: string
+    required?: boolean
+  }>
+}
+
+/**
+ * MCP Prompt result
+ */
+export interface MCPPromptResult {
+  messages: Array<{
+    role: 'user' | 'assistant'
+    content: {
+      type: 'text'
+      text: string
+    } | {
+      type: 'image'
+      data: string
+      mimeType: string
+    } | {
+      type: 'resource'
+      resource: {
+        uri: string
+        mimeType?: string
+      }
+    }
+  }>
+}
+
+// ============================================================================
+// MCP Resources Types
+// ============================================================================
+
+/**
+ * MCP Resource definition
+ */
+export interface MCPResource {
+  uri: string
+  name?: string
+  description?: string
+  mimeType?: string
+}
+
+/**
+ * MCP Resource content
+ */
+export interface MCPResourceContent {
+  contents: Array<{
+    uri: string
+    mimeType?: string
+    text?: string
+    blob?: string
+  }>
 }

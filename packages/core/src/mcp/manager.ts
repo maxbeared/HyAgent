@@ -6,11 +6,16 @@
  */
 
 import { createMCPClient, MCPClientImpl } from './client.js'
+import { getMcpAuthManager, startOAuthCallbackServer, type AuthStatus } from './auth.js'
 import type {
   MCPServerConfig,
   MCPServerState,
   MCPTool,
   MCPToolResult,
+  MCPPrompt,
+  MCPPromptResult,
+  MCPResource,
+  MCPResourceContent,
   MCPConnectionStatus,
 } from './types.js'
 
@@ -140,6 +145,145 @@ export class MCPServerManager {
     }
 
     return tools
+  }
+
+  /**
+   * List prompts from an MCP server
+   */
+  async listPrompts(name: string) {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    if (entry.status !== 'connected') {
+      throw new Error(`MCP server not connected: ${name}`)
+    }
+
+    return entry.client.listPrompts()
+  }
+
+  /**
+   * Get a prompt from an MCP server
+   */
+  async getPrompt(name: string, promptName: string, args?: Record<string, unknown>) {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    if (entry.status !== 'connected') {
+      throw new Error(`MCP server not connected: ${name}`)
+    }
+
+    return entry.client.getPrompt(promptName, args)
+  }
+
+  /**
+   * List resources from an MCP server
+   */
+  async listResources(name: string) {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    if (entry.status !== 'connected') {
+      throw new Error(`MCP server not connected: ${name}`)
+    }
+
+    return entry.client.listResources()
+  }
+
+  /**
+   * Read a resource from an MCP server
+   */
+  async readResource(name: string, uri: string) {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    if (entry.status !== 'connected') {
+      throw new Error(`MCP server not connected: ${name}`)
+    }
+
+    return entry.client.readResource(uri)
+  }
+
+  /**
+   * Get OAuth authentication status for a server
+   */
+  getAuthStatus(name: string): AuthStatus {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    const authManager = getMcpAuthManager()
+    return authManager.getAuthStatus(entry.config)
+  }
+
+  /**
+   * Start OAuth authentication flow for a server
+   */
+  async startAuth(name: string): Promise<{ authUrl: string }> {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    const authManager = getMcpAuthManager()
+    const provider = authManager.getProvider(entry.config)
+    return provider.startAuth()
+  }
+
+  /**
+   * Complete OAuth authentication with authorization code
+   */
+  async finishAuth(name: string, code: string): Promise<void> {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    const authManager = getMcpAuthManager()
+    const provider = authManager.getProvider(entry.config)
+    await provider.finishAuth(code)
+
+    // Reconnect with new credentials
+    if (entry.status === 'connected') {
+      entry.client.disconnect()
+    }
+    await entry.client.connect()
+    entry.status = 'connected'
+    entry.tools = await entry.client.listTools()
+  }
+
+  /**
+   * Remove OAuth credentials for a server
+   */
+  removeAuth(name: string): void {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    const authManager = getMcpAuthManager()
+    authManager.removeAuth(entry.config)
+  }
+
+  /**
+   * Check if a server requires OAuth authentication
+   */
+  requiresAuth(name: string): boolean {
+    const entry = this.servers.get(name)
+    if (!entry) {
+      throw new Error(`MCP server not found: ${name}`)
+    }
+
+    const authManager = getMcpAuthManager()
+    return authManager.needsAuth(entry.config)
   }
 }
 

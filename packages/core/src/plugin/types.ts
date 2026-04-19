@@ -94,6 +94,15 @@ export interface PluginHooks {
    * Called when an error occurs
    */
   onError?: (context: HookContext & { error: Error }) => void | Promise<void>
+
+  /**
+   * Called when tool definitions are being built.
+   * Allows plugins to modify, add, or remove tool definitions before sending to LLM.
+   *
+   * @param tools - Current array of tool definitions
+   * @returns Modified tool definitions or void (if no changes)
+   */
+  onToolDefinition?: (tools: ToolDef[]) => ToolDef[] | void | Promise<ToolDef[] | void>
 }
 
 /**

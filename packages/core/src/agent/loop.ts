@@ -16,9 +16,10 @@
  */
 
 import { TOOL_DEFINITIONS, executeToolCallsConcurrently } from './tools.js'
-import { compactMessages, shouldCompact, type Message } from './compaction.js'
+import { compactMessages, shouldCompact, checkCompactionState, type Message } from './compaction.js'
 import { detectDoomLoop, hasSubstantialText } from './doomDetect.js'
 import { saveCheckpoint } from './checkpoint.js'
+import { getHooksRegistry, type TurnEndContext, type TaskCompleteContext, type IterationContext } from './hooks.js'
 
 // How many consecutive identical tool calls trigger doom loop detection
 const DOOM_LOOP_THRESHOLD = 3
@@ -54,6 +55,7 @@ export type StopReason =
   | 'token_budget_exceeded'  // Token budget would exceed limit
   | 'tool_execution_error'   // Tool execution failed
   | 'api_error'              // API returned error
+  | 'stopped_by_hook'        // Stopped by agent hook
 
 export interface StopDetail {
   reason: StopReason
@@ -156,14 +158,20 @@ function formatAPIError(status: number, rawBody: string): { message: string; ret
 }
 
 /**
- * Make a single LLM API call. Returns { data } on success, throws on non-retryable error.
+ * Make a single LLM API call. Returns { data, headers } on success, throws on non-retryable error.
  * Does NOT handle retry logic — caller handles that via the AsyncGenerator yield.
+ *
+ * The error object may include:
+ * - retryable: boolean indicating if the request can be retried
+ * - retryAfterMs: number | undefined - server-suggested wait time
+ * - status: HTTP status code
+ * - rawError: original error object
  */
 async function callLLM(
   messages: Message[],
   cfg: AgentConfig,
   maxTokens = 4096,
-): Promise<any> {
+): Promise<{ data: any; headers?: Headers }> {
   const baseUrl = cfg.baseUrl.replace(/\/v1$/, '')
   const body = JSON.stringify({
     model: cfg.model,
@@ -193,9 +201,11 @@ async function callLLM(
       const err = new Error(message)
       ;(err as any).retryable = retryable
       ;(err as any).rawError = data
+      ;(err as any).status = response.status
+      ;(err as any).headers = response.headers
       throw err
     }
-    return data
+    return { data, headers: response.headers }
   }
 
   const errorText = await response.text()
@@ -204,7 +214,56 @@ async function callLLM(
   ;(err as any).status = response.status
   ;(err as any).retryable = retryable
   ;(err as any).rawError = message
+  ;(err as any).headers = response.headers
   throw err
+}
+
+/**
+ * Parse retry-after information from response headers.
+ * Supports:
+ * - retry-after-ms: direct milliseconds to wait (OpenAI/MiniMax style)
+ * - retry-after: seconds (standard HTTP header, also handles "Thu, 01 Jan 2025..." format)
+ */
+function parseRetryAfter(headers: Headers | undefined): number | undefined {
+  if (!headers) return undefined
+
+  // Try retry-after-ms first (OpenAI/MiniMax custom header)
+  const retryAfterMs = headers.get('retry-after-ms')
+  if (retryAfterMs) {
+    const ms = parseInt(retryAfterMs, 10)
+    if (!isNaN(ms) && ms > 0) return ms
+  }
+
+  // Try standard retry-after header (seconds or HTTP date)
+  const retryAfter = headers.get('retry-after')
+  if (retryAfter) {
+    // Try parsing as seconds first
+    const seconds = parseInt(retryAfter, 10)
+    if (!isNaN(seconds) && seconds > 0) return seconds * 1000
+
+    // Try parsing as HTTP date
+    const date = new Date(retryAfter)
+    if (!isNaN(date.getTime())) {
+      const msUntilRetry = date.getTime() - Date.now()
+      if (msUntilRetry > 0) return msUntilRetry
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * Calculate exponential backoff delay, respecting server suggestion.
+ * Falls back to exponential backoff if no server suggestion.
+ */
+function calculateRetryDelay(attempt: number, serverSuggestedMs?: number): number {
+  if (serverSuggestedMs !== undefined && serverSuggestedMs > 0) {
+    // Cap server suggestion at 30 seconds to avoid extremely long waits
+    return Math.min(serverSuggestedMs, 30000)
+  }
+
+  // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+  return Math.min(1000 * Math.pow(2, attempt), 16000)
 }
 
 /**
@@ -236,8 +295,19 @@ export async function* runAgentLoopStream(
   let consecutiveToolOnlyTurns = 0   // Hard cap counter (safety net)
   let toolsUsed = 0
 
+  // Get hooks registry once at the start
+  const hooks = getHooksRegistry()
+
   while (iterations < maxIterations) {
     iterations++
+
+    // ---- Execute onIterationStart hooks ----
+    await hooks.executeIterationStart({
+      sessionId,
+      task,
+      iteration: iterations,
+      messages,
+    })
 
     // ---- Call LLM (with retry loop — yields retry events immediately after failure) ----
     let data: any
@@ -256,15 +326,40 @@ export async function* runAgentLoopStream(
             stopReason: 'api_error',
             stopDetail: { reason: 'api_error', lastError: e.message },
           }
+
+          // ---- Execute onError hooks ----
+          await hooks.executeError({
+            sessionId,
+            task,
+            iterations,
+            messages,
+            error: e.message,
+            iteration: iterations,
+            fatal: true,
+          })
+
+          // ---- Execute onTaskComplete hooks ----
+          await hooks.executeTaskComplete({
+            sessionId,
+            task,
+            iterations,
+            messages,
+            result: 'failed',
+            stopReason: 'api_error',
+            error: e.message,
+          })
+
           return
         }
 
         if (e.retryable) {
-          // Exponential backoff: 1s, 2s, 4s, 8s, 16s
-          const delay = Math.min(1000 * Math.pow(2, attempt), 16000)
+          // Parse retry-after from headers
+          const retryAfterMs = parseRetryAfter(e.headers)
+          const delay = calculateRetryDelay(attempt, retryAfterMs)
+          const source = retryAfterMs ? 'server' : 'exponential'
           yield {
             type: 'retry',
-            content: `Retry ${attempt + 1}/${MAX_RETRIES} — ${e.message} — waiting ${delay}ms...`,
+            content: `Retry ${attempt + 1}/${MAX_RETRIES} (${source}) — ${e.message} — waiting ${delay}ms...`,
           }
           await sleep(delay)
           // Continue to next retry
@@ -321,6 +416,17 @@ export async function* runAgentLoopStream(
           maxTurns: actualMaxTurns,
         },
       }
+
+      // ---- Execute onTaskComplete hooks ----
+      await hooks.executeTaskComplete({
+        sessionId,
+        task,
+        iterations,
+        messages,
+        result: 'success',
+        stopReason: 'completed',
+        output: finalText,
+      })
       return
     }
 
@@ -373,6 +479,42 @@ export async function* runAgentLoopStream(
     // IMPORTANT: preserve ALL content blocks (text + tool_use), not just tool_use.
     // Sending only tool_use blocks causes API validation errors.
     messages.push({ role: 'assistant', content: blocks })
+
+    // ---- Execute onTurnEnd hooks ----
+    const textBlock = blocks.find((b: any) => b.type === 'text')
+    const turnEndResult = await hooks.executeTurnEnd({
+      sessionId,
+      task,
+      iterations,
+      messages,
+      turnNumber: iterations,
+      stopReason: stopReason || undefined,
+      toolCalls: toolUseBlocks.map((b: any) => ({
+        name: b.name,
+        input: b.input,
+      })),
+      text: textBlock?.text,
+    })
+
+    // If hook indicates we should stop, respect that
+    if (turnEndResult && typeof turnEndResult === 'object' && turnEndResult.stop) {
+      yield {
+        type: 'done',
+        content: turnEndResult.message || 'Stopped by hook',
+        iterations,
+        stopReason: (turnEndResult.stopReason || 'stopped_by_hook') as StopReason,
+      }
+      // Execute task complete hooks
+      await hooks.executeTaskComplete({
+        sessionId,
+        task,
+        iterations,
+        messages,
+        result: 'stopped',
+        stopReason: turnEndResult.stopReason || 'stopped_by_hook',
+      })
+      return
+    }
 
     // ---- Execute tool calls concurrently ----
     const toolCalls = toolUseBlocks.map((b: any) => ({
@@ -431,7 +573,19 @@ export async function* runAgentLoopStream(
       // Don't return — continue the loop so LLM can handle the failure
     }
 
-    // ---- Session compaction ----
+    // ---- Reactive Session compaction ----
+    // Check compaction state including mid-turn warning
+    const compactionState = checkCompactionState(totalTokens)
+
+    // Emit warning if approaching limit but not yet at limit
+    if (compactionState.warningIssued && !compactionState.shouldCompactNow) {
+      yield {
+        type: 'compaction',
+        content: compactionState.reason || `Token budget warning (${totalTokens} tokens used)...`,
+        totalTokens,
+      }
+    }
+
     if (shouldCompact(totalTokens)) {
       yield {
         type: 'compaction',
@@ -460,6 +614,16 @@ export async function* runAgentLoopStream(
       totalOutputTokens,
       consecutiveToolOnlyTurns,
     )
+
+    // ---- Execute onIterationEnd hooks ----
+    await hooks.executeIterationEnd({
+      sessionId,
+      task,
+      iterations,
+      messages,
+      iteration: iterations,
+      hasErrors,
+    })
   }
 
   // Max iterations reached
@@ -474,6 +638,16 @@ export async function* runAgentLoopStream(
       maxIterations,
     },
   }
+
+  // ---- Execute onTaskComplete hooks ----
+  await hooks.executeTaskComplete({
+    sessionId,
+    task,
+    iterations,
+    messages,
+    result: 'failed',
+    stopReason: 'max_iterations',
+  })
 }
 
 /**
