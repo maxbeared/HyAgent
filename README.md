@@ -197,15 +197,41 @@ packages/core/src/
 │   ├── checkpoint.ts   # Checkpoint
 │   ├── compaction.ts  # 压缩
 │   ├── hooks.ts       # 生命周期钩子
+│   ├── comprehensive-hooks.ts  # 全面钩子系统
+│   ├── dynamic/        # 动态 Agent 生成
 │   └── coordinator/    # 多Agent协调
+│       ├── index.ts   # 协调服务
+│       ├── types.ts   # 协调类型
+│       └── subagent.ts # Subagent 工具
 ├── skill/              # Skill 系统
+│   ├── index.ts       # Skill 管理
+│   ├── discovery.ts   # Skill 发现
+│   ├── types.ts      # Skill 类型
+│   ├── service.ts    # Skill 服务
+│   └── url.ts        # Skill URL 拉取
 ├── tool/               # 工具实现
 ├── mcp/                # MCP 支持
+│   ├── index.ts       # MCP 入口
+│   ├── auth.ts        # OAuth 认证
+│   ├── oauth2.ts     # OAuth 2.0 动态注册
+│   ├── client.ts      # MCP 客户端
+│   ├── manager.ts     # MCP 管理器
+│   └── types.ts      # MCP 类型
 ├── plugin/             # Plugin 系统
 ├── provider/           # Provider 抽象
 ├── snapshot/           # 快照系统
+│   ├── index.ts       # 快照管理
+│   └── batch.ts       # 批量操作
 ├── bridge/             # WebSocket Bridge
 ├── bus/                # PubSub 事件
+│   ├── index.ts       # 事件总线
+│   ├── enhanced.ts    # 增强型事件（通配符订阅）
+│   └── types.ts       # 事件类型
+├── ide/                # IDE 扩展集成
+├── mailbox/            # 邮箱系统（React Context）
+├── notification/        # 通知队列
+├── worktree/           # Git Worktree 管理
+├── acp/                # Agent 通信协议
 └── permission/         # 权限分类器
 ```
 
@@ -250,34 +276,19 @@ pnpm build
 
 ## 已知问题
 
-### TypeScript 构建错误（38个）
+### TypeScript 构建错误（26个）
 
 部分深层架构问题需要较大范围重构才能彻底解决：
 
 | 问题类型 | 数量 | 说明 |
 |---------|------|------|
-| Effect 类型不匹配 | ~15 | 实现返回 `Error, never` 但接口定义 `never, never` |
+| Effect 类型不匹配 | ~10 | 实现返回 `Error, never` 但接口定义 `never, never` |
 | Message content/parts | 6 | 代码使用 `content` 属性但类型定义要求 `parts` 数组 |
-| Coordinator Effect | 10 | Queue/Scope/asUnit 等高层抽象类型问题 |
-| Provider/ToolRegistry | 4 | 接口类型被当作值使用 |
+| Coordinator Effect | 8 | Queue/Scope/asUnit 等高层抽象类型问题 |
+| Provider/ToolRegistry | 2 | 接口类型被当作值使用 |
 
 **临时解决**：代码可正常运行，但 `pnpm build` 会报类型错误。
 
 ### 未实现功能（参考 OpenCode/Claude Code）
 
-高优先级待实现：
-
-| 功能 | 来源 | 说明 |
-|------|------|------|
-| Worktree Management | OpenCode | Git worktree 隔离，per-worktree 实例引导 |
-| ACP Protocol | OpenCode | Agent 间通信、服务发现、能力协商 |
-| Dynamic Agent Generation | OpenCode | 从描述动态生成 Agent，支持多种内置 Agent 类型 |
-| IDE Extension Integration | OpenCode | VS Code/Cursor/Windsurf 扩展安装 |
-| Snapshot 批量操作 | OpenCode | 批量 git 操作，自动化清理，diff 生成 |
-| Skill URL 拉取 | OpenCode | 从 URL 拉取 skill，支持 SKILL.md 格式 |
-| Bus Event System 完善 | OpenCode | 通配符订阅，全局 Bus，实例释放事件 |
-| MCP OAuth 2.0 | OpenCode | 动态客户端注册，SSE transport，per-server 超时 |
-| Coordinator 完善 | Claude Code | Subagent 工具（AgentTool/SendMessageTool/TaskStopTool） |
-| Mailbox System | Claude Code | React context 消息队列，provider 模式 |
-| Notification Queue | Claude Code | 优先级队列，通知折叠，超时管理 |
-| Comprehensive Hooks | Claude Code | useCanUseTool, useTypeahead, useScheduledTasks 等 |
+（已全部实现，详见各模块源码）
