@@ -6,14 +6,24 @@
  * - 消息管理
  * - 会话压缩 (Compaction) - 来自Claude Code的tokenBudget概念
  *
+ * 持久化: 使用 SQLite (better-sqlite3)
+ *
  * 参考来源:
  * - opencode/packages/opencode/src/server/session/
  * - Anthropic-Leaked-Source-Code/query/tokenBudget.ts
  */
 
-import { Effect, Layer, Ref, Context } from 'effect'
-import type { Session, Message, MessagePart, CompactionConfig, CompactionResult } from './types.js'
-import { shouldCompact } from './types.js'
+import { Effect, Layer } from 'effect'
+import type { Session, Message, CompactionConfig, CompactionResult, SessionService } from './types.js'
+import { shouldCompact, SessionServiceTag } from './types.js'
+import {
+  dbInsertSession,
+  dbGetSession,
+  dbUpdateSession,
+  dbUpdateSessionMetadata,
+  dbDeleteSession,
+  dbListSessions,
+} from './db.js'
 
 // ============================================================================
 // Helper Functions
@@ -52,8 +62,6 @@ function estimateTotalTokens(messages: Message[]): number {
  * Placeholder - in real implementation, call LLM API
  */
 async function generateSummary(messages: Message[]): Promise<string> {
-  // In a real implementation, this would call the LLM to generate a summary
-  // For now, return a placeholder
   const lastMessages = messages.slice(-10)
   const preview = lastMessages
     .map((m) => `[${m.role}]: ${m.parts.filter((p) => p.type === 'text').map((p) => (p as { type: 'text'; content: string }).content).join('')}`)
@@ -63,37 +71,19 @@ async function generateSummary(messages: Message[]): Promise<string> {
 }
 
 // ============================================================================
-// Session Store (in-memory implementation)
-// ============================================================================
-
-interface SessionStore {
-  sessions: Map<string, Session>
-  messageCounters: Map<string, number>
-}
-
-/**
- * Create in-memory session store
- */
-function createSessionStore(): SessionStore {
-  return {
-    sessions: new Map(),
-    messageCounters: new Map(),
-  }
-}
-
-// ============================================================================
-// Session Service Implementation
+// Session Service Implementation (SQLite-backed)
 // ============================================================================
 
 /**
- * Create Session Service layer
+ * Create Session Service layer with SQLite persistence
  */
 export const SessionServiceLayer = Layer.effect(
   SessionServiceTag,
   Effect.gen(function* () {
-    const store = yield* Ref.make<SessionStore>(createSessionStore())
+    // Message counters stored separately (not persisted across restarts)
+    const counters = new Map<string, number>()
 
-    return SessionService.of({
+    return SessionServiceTag.of({
       create(options) {
         return Effect.gen(function* () {
           const sessionID = generateId('session')
@@ -109,11 +99,11 @@ export const SessionServiceLayer = Layer.effect(
             metadata: options?.metadata,
           }
 
-          yield* Ref.update(store, (s) => {
-            s.sessions.set(sessionID, session)
-            s.messageCounters.set(sessionID, 0)
-            return s
-          })
+          // Persist to SQLite
+          yield* Effect.sync(() => dbInsertSession(session))
+
+          // Initialize counter for this session
+          counters.set(sessionID, 0)
 
           return session
         })
@@ -121,35 +111,34 @@ export const SessionServiceLayer = Layer.effect(
 
       get(sessionID) {
         return Effect.gen(function* () {
-          const s = yield* Ref.get(store)
-          return s.sessions.get(sessionID)
+          const session = yield* Effect.sync(() => dbGetSession(sessionID))
+          return session
         })
       },
 
       addMessage(sessionID, messageInput) {
         return Effect.gen(function* () {
-          const s = yield* Ref.get(store)
-          const session = s.sessions.get(sessionID)
+          const session = yield* Effect.sync(() => dbGetSession(sessionID))
 
           if (!session) {
             return yield* Effect.fail(new Error(`Session not found: ${sessionID}`))
           }
 
-          const counter = s.messageCounters.get(sessionID) ?? 0
+          const counter = counters.get(sessionID) ?? 0
           const message: Message = {
             ...messageInput,
             id: generateId(`msg_${counter}`),
             timestamp: Date.now(),
           }
 
-          // Update session
-          yield* Ref.update(store, (s) => {
-            const session = s.sessions.get(sessionID)!
-            session.messages.push(message)
-            session.updatedAt = Date.now()
-            s.messageCounters.set(sessionID, counter + 1)
-            return s
-          })
+          // Update session in SQLite
+          session.messages.push(message)
+          session.updatedAt = Date.now()
+
+          yield* Effect.sync(() => dbUpdateSession(sessionID, session.messages, session.updatedAt))
+
+          // Increment counter
+          counters.set(sessionID, counter + 1)
 
           return message
         })
@@ -157,46 +146,42 @@ export const SessionServiceLayer = Layer.effect(
 
       getMessages(sessionID) {
         return Effect.gen(function* () {
-          const s = yield* Ref.get(store)
-          const session = s.sessions.get(sessionID)
+          const session = yield* Effect.sync(() => dbGetSession(sessionID))
           return session?.messages ?? []
         })
       },
 
       updateMetadata(sessionID, metadata) {
         return Effect.gen(function* () {
-          yield* Ref.update(store, (s) => {
-            const session = s.sessions.get(sessionID)
-            if (session) {
-              session.metadata = { ...session.metadata, ...metadata }
-              session.updatedAt = Date.now()
-            }
-            return s
-          })
+          const session = yield* Effect.sync(() => dbGetSession(sessionID))
+          if (!session) {
+            return yield* Effect.fail(new Error(`Session not found: ${sessionID}`))
+          }
+
+          session.metadata = { ...session.metadata, ...metadata }
+          session.updatedAt = Date.now()
+
+          yield* Effect.sync(() => dbUpdateSessionMetadata(sessionID, session.metadata, session.updatedAt))
         })
       },
 
       delete(sessionID) {
         return Effect.gen(function* () {
-          yield* Ref.update(store, (s) => {
-            s.sessions.delete(sessionID)
-            s.messageCounters.delete(sessionID)
-            return s
-          })
+          yield* Effect.sync(() => dbDeleteSession(sessionID))
+          counters.delete(sessionID)
         })
       },
 
       compact(sessionID, config) {
         return Effect.gen(function* () {
-          const s = yield* Ref.get(store)
-          const session = s.sessions.get(sessionID)
+          const session = yield* Effect.sync(() => dbGetSession(sessionID))
 
           if (!session) {
             return yield* Effect.fail(new Error(`Session not found: ${sessionID}`))
           }
 
           const messages = session.messages
-          const { shouldCompact: needs } = shouldCompact(messages, config)
+          const needs = shouldCompact(messages, config)
 
           if (!needs.shouldCompact) {
             return {
@@ -221,13 +206,9 @@ export const SessionServiceLayer = Layer.effect(
 
           const compactedMessages = [summaryMessage, ...recentMessages]
 
-          // Update session
-          yield* Ref.update(store, (s) => {
-            const session = s.sessions.get(sessionID)!
-            session.messages = compactedMessages
-            session.updatedAt = Date.now()
-            return s
-          })
+          // Update in SQLite
+          const now = Date.now()
+          yield* Effect.sync(() => dbUpdateSession(sessionID, compactedMessages, now))
 
           const originalTokens = estimateTotalTokens(messages)
           const compactedTokens = estimateTotalTokens(compactedMessages)
@@ -243,8 +224,7 @@ export const SessionServiceLayer = Layer.effect(
 
       list() {
         return Effect.gen(function* () {
-          const s = yield* Ref.get(store)
-          return Array.from(s.sessions.values())
+          return yield* Effect.sync(() => dbListSessions())
         })
       },
     })

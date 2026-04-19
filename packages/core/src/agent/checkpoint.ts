@@ -6,9 +6,17 @@
  *
  * Checkpoint is saved automatically after each iteration in the agent loop.
  * Recovery happens via POST /api/sessions/:id/resume.
+ *
+ * 持久化: 使用 SQLite (better-sqlite3)
  */
 
-import type { Message } from './compaction.js'
+import type { Message } from '../session/types.js'
+import {
+  dbUpsertCheckpoint,
+  dbGetCheckpoint,
+  dbDeleteCheckpoint,
+  dbListCheckpoints,
+} from '../session/db.js'
 
 export interface TaskCheckpoint {
   sessionId: string
@@ -21,9 +29,6 @@ export interface TaskCheckpoint {
   createdAt: number
   updatedAt: number
 }
-
-// In-memory checkpoint store (can be replaced with persistent storage)
-const checkpoints = new Map<string, TaskCheckpoint>()
 
 /**
  * Save a checkpoint for a session.
@@ -38,6 +43,7 @@ export function saveCheckpoint(
   consecutiveToolOnlyTurns: number,
 ): TaskCheckpoint {
   const now = Date.now()
+  const existing = dbGetCheckpoint(sessionId)
   const checkpoint: TaskCheckpoint = {
     sessionId,
     task,
@@ -46,10 +52,10 @@ export function saveCheckpoint(
     totalInputTokens,
     totalOutputTokens,
     consecutiveToolOnlyTurns,
-    createdAt: checkpoints.get(sessionId)?.createdAt ?? now,
+    createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
-  checkpoints.set(sessionId, checkpoint)
+  dbUpsertCheckpoint(checkpoint)
   return checkpoint
 }
 
@@ -57,21 +63,21 @@ export function saveCheckpoint(
  * Get a checkpoint for a session, if it exists.
  */
 export function getCheckpoint(sessionId: string): TaskCheckpoint | undefined {
-  return checkpoints.get(sessionId)
+  return dbGetCheckpoint(sessionId)
 }
 
 /**
  * Delete a checkpoint (after successful completion or user request).
  */
 export function deleteCheckpoint(sessionId: string): void {
-  checkpoints.delete(sessionId)
+  dbDeleteCheckpoint(sessionId)
 }
 
 /**
  * List all active checkpoints.
  */
 export function listCheckpoints(): TaskCheckpoint[] {
-  return Array.from(checkpoints.values())
+  return dbListCheckpoints()
 }
 
 /**
@@ -87,7 +93,7 @@ export interface ResumeInfo {
  * Attempt to get resume info for a session.
  */
 export function getResumeInfo(sessionId: string): ResumeInfo {
-  const checkpoint = checkpoints.get(sessionId)
+  const checkpoint = dbGetCheckpoint(sessionId)
   if (!checkpoint) {
     return { canResume: false, error: 'No checkpoint found for this session' }
   }

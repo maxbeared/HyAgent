@@ -39,6 +39,16 @@ import { executeTool } from './agent/tools.js'
 import { runAgentLoop, runAgentLoopStream, type AgentConfig } from './agent/loop.js'
 import type { Message } from './agent/compaction.js'
 import { getCheckpoint, deleteCheckpoint, type TaskCheckpoint } from './agent/checkpoint.js'
+import {
+  dbInsertSession,
+  dbGetSession,
+  dbUpdateSession,
+  dbUpdateSessionMessages,
+  dbDeleteSession,
+  dbListSessions,
+} from './session/db.js'
+import { getMCPServerManager, type MCPServerConfig } from './mcp/index.js'
+import { getPluginRegistry, loadPlugin, type PluginLoadOptions } from './plugin/index.js'
 
 // ---- Types ----
 
@@ -253,40 +263,188 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     return c.json(checkCommandSafety(command))
   })
 
-  // ---- Sessions ----
+  // ---- MCP Servers ----
+
+  const mcp = getMCPServerManager()
+
+  // List all MCP servers
+  app.get('/api/mcp/servers', c => {
+    return c.json(mcp.getServers())
+  })
+
+  // Add an MCP server
+  app.post('/api/mcp/servers', async c => {
+    const config: MCPServerConfig = await c.req.json()
+    if (!config.name) {
+      return c.json({ error: 'Server name is required' }, 400)
+    }
+    try {
+      mcp.addServer(config)
+      return c.json({ success: true, server: config.name }, 201)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // Remove an MCP server
+  app.delete('/api/mcp/servers/:name', c => {
+    const name = c.req.param('name')
+    try {
+      mcp.removeServer(name)
+      return c.json({ success: true })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404)
+    }
+  })
+
+  // Connect to an MCP server
+  app.post('/api/mcp/servers/:name/connect', async c => {
+    const name = c.req.param('name')
+    try {
+      await mcp.connect(name)
+      const server = mcp.getServer(name)
+      return c.json({ success: true, server })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // Disconnect from an MCP server
+  app.post('/api/mcp/servers/:name/disconnect', c => {
+    const name = c.req.param('name')
+    try {
+      mcp.disconnect(name)
+      return c.json({ success: true })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // List tools on an MCP server
+  app.get('/api/mcp/servers/:name/tools', c => {
+    const name = c.req.param('name')
+    const server = mcp.getServer(name)
+    if (!server) {
+      return c.json({ error: 'Server not found' }, 404)
+    }
+    return c.json(server.tools)
+  })
+
+  // List all available MCP tools from all connected servers
+  app.get('/api/mcp/tools', c => {
+    return c.json(mcp.getAllTools())
+  })
+
+  // Call an MCP tool
+  app.post('/api/mcp/call', async c => {
+    const { server, tool, args } = await c.req.json()
+    if (!server || !tool) {
+      return c.json({ error: 'server and tool are required' }, 400)
+    }
+    try {
+      const result = await mcp.callTool(server, tool, args ?? {})
+      return c.json(result)
+    } catch (err) {
+      return c.json({ success: false, error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // ---- Plugins ----
+
+  const plugins = getPluginRegistry()
+
+  // List all loaded plugins
+  app.get('/api/plugins', c => {
+    return c.json(plugins.list().map(p => ({
+      name: p.name,
+      version: p.version,
+      toolCount: p.tools.length,
+    })))
+  })
+
+  // Get plugin details
+  app.get('/api/plugins/:name', c => {
+    const name = c.req.param('name')
+    const plugin = plugins.get(name)
+    if (!plugin) {
+      return c.json({ error: 'Plugin not found' }, 404)
+    }
+    return c.json({
+      name: plugin.name,
+      version: plugin.version,
+      description: plugin.instance.description,
+      tools: plugin.tools.map(t => ({ id: t.id, description: t.description })),
+    })
+  })
+
+  // Load and register a plugin
+  app.post('/api/plugins', async c => {
+    const options: PluginLoadOptions = await c.req.json()
+    if (!options.name) {
+      return c.json({ error: 'Plugin name is required' }, 400)
+    }
+    try {
+      const plugin = await loadPlugin(options)
+      plugins.register(plugin)
+      return c.json({ success: true, plugin: { name: plugin.name, version: plugin.version } }, 201)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+    }
+  })
+
+  // Unload a plugin
+  app.delete('/api/plugins/:name', async c => {
+    const name = c.req.param('name')
+    try {
+      await plugins.unregister(name)
+      return c.json({ success: true })
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, err instanceof Error && err.name === 'PluginNotFoundError' ? 404 : 400)
+    }
+  })
+
+  // Get all tools from all plugins
+  app.get('/api/plugins/tools', c => {
+    return c.json(plugins.getAllTools().map(t => ({ id: t.id, description: t.description })))
+  })
+
+  // ---- Sessions (SQLite-backed) ----
 
   app.post('/api/sessions', async c => {
     const body = await c.req.json()
     const id = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    const session: Session = { id, messages: [], model: body.model ?? cfg.model, provider: body.provider ?? cfg.provider, createdAt: Date.now(), updatedAt: Date.now() }
-    sessions.set(id, session)
+    const now = Date.now()
+    const session: Session = { id, messages: [], model: body.model ?? cfg.model, provider: body.provider ?? cfg.provider, createdAt: now, updatedAt: now }
+    dbInsertSession(session)
     return c.json(session, 201)
   })
 
-  app.get('/api/sessions', c => c.json(Array.from(sessions.values())))
+  app.get('/api/sessions', c => c.json(dbListSessions()))
 
   app.get('/api/sessions/:id', c => {
-    const session = sessions.get(c.req.param('id'))
+    const session = dbGetSession(c.req.param('id'))
     return session ? c.json(session) : c.json({ error: 'Session not found' }, 404)
   })
 
   app.delete('/api/sessions/:id', c => {
-    sessions.delete(c.req.param('id'))
+    dbDeleteSession(c.req.param('id'))
     return c.json({ success: true })
   })
 
   app.post('/api/sessions/:id/messages', async c => {
-    const session = sessions.get(c.req.param('id'))
+    const id = c.req.param('id')
+    const session = dbGetSession(id)
     if (!session) return c.json({ error: 'Session not found' }, 404)
     const body = await c.req.json()
     const message = { id: `msg_${Date.now()}`, role: body.role ?? 'user', content: body.content ?? '', timestamp: Date.now() }
     session.messages.push(message)
     session.updatedAt = Date.now()
+    dbUpdateSessionMessages(id, session.messages, session.updatedAt)
     return c.json(message, 201)
   })
 
   app.get('/api/sessions/:id/messages', c => {
-    const session = sessions.get(c.req.param('id'))
+    const session = dbGetSession(c.req.param('id'))
     return session ? c.json(session.messages) : c.json({ error: 'Session not found' }, 404)
   })
 
@@ -303,7 +461,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
 
   app.post('/api/sessions/:id/resume', async c => {
     const sessionId = c.req.param('id')
-    const session = sessions.get(sessionId)
+    const session = dbGetSession(sessionId)
     if (!session) return c.json({ error: 'Session not found' }, 404)
 
     const checkpoint = getCheckpoint(sessionId)
@@ -336,6 +494,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
       })
     }
     session.updatedAt = Date.now()
+    dbUpdateSessionMessages(sessionId, session.messages, session.updatedAt)
 
     return c.json({
       sessionId,
@@ -443,8 +602,12 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
 
       const msg = { id: `msg_${Date.now()}`, role: 'assistant', content, timestamp: Date.now() }
       if (sessionId) {
-        const session = sessions.get(sessionId)
-        if (session) { session.messages.push(msg); session.updatedAt = Date.now() }
+        const session = dbGetSession(sessionId)
+        if (session) {
+          session.messages.push(msg)
+          session.updatedAt = Date.now()
+          dbUpdateSessionMessages(sessionId, session.messages, session.updatedAt)
+        }
       }
       return c.json({ message: msg, usage: data.usage ?? {} })
     } catch (e: any) {
@@ -456,7 +619,8 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
 
   // Send a message in an existing session — agent can use tools and sees full history
   app.post('/api/chat/:sessionId', async c => {
-    const session = sessions.get(c.req.param('sessionId'))
+    const sessionId = c.req.param('sessionId')
+    const session = dbGetSession(sessionId)
     if (!session) return c.json({ error: 'Session not found' }, 404)
 
     const { content, maxIterations } = await c.req.json()
@@ -488,6 +652,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     }
 
     session.updatedAt = Date.now()
+    dbUpdateSessionMessages(sessionId, session.messages, session.updatedAt)
 
     return c.json({
       sessionId: session.id,
@@ -501,7 +666,8 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
 
   // SSE streaming version of chat with session
   app.get('/api/chat/:sessionId/stream', async c => {
-    const session = sessions.get(c.req.param('sessionId'))
+    const sessionId = c.req.param('sessionId')
+    const session = dbGetSession(sessionId)
     if (!session) return c.json({ error: 'Session not found' }, 404)
 
     const task = c.req.query('task') ?? c.req.query('content')
@@ -527,6 +693,8 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
             content: event.content,
             timestamp: Date.now(),
           })
+          // Persist to SQLite after stream completes
+          dbUpdateSessionMessages(sessionId, session.messages, Date.now())
         }
         // Only break (close SSE) for terminal stop reasons.
         // 'tool_execution_error' is non-terminal — agent continues, keep stream open.

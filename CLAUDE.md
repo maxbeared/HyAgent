@@ -19,17 +19,47 @@
 
 ```
 packages/core/src/
-├── dev.ts              # 入口（~30行），启动 Hono 服务
+├── dev.ts              # 入口，启动 Hono 服务
 ├── config.ts           # 配置加载：扫描 hybrid-agent/Claude/OpenCode 配置文件
-├── permission.ts       # 路径/命令安全检查（借鉴 Claude Code pathValidation）
-├── server.ts           # Hono HTTP 路由（~500行）
+├── permission.ts       # 路径/命令安全检查
+├── server.ts           # Hono HTTP 路由
 ├── repl.ts             # CLI REPL 工具（与 agent 交互的终端界面）
-└── agent/
-    ├── loop.ts         # Agent 核心循环（精确 doom loop 检测、丰富 stop reasons、compaction）
-    ├── doomDetect.ts   # 精确 doom loop 检测（借鉴 OpenCode：同工具+同输入重复N次）
-    ├── tools.ts        # 工具定义 + 并发执行（read/glob/grep 并行，bash/edit 串行）+ 输出截断
-    ├── checkpoint.ts   # 任务可恢复性（每轮保存 checkpoint，支持 resume）
-    └── compaction.ts   # 会话压缩（token 超阈值时调用 LLM 生成摘要）
+├── session/
+│   ├── index.ts        # Session 管理（SQLite 持久化）
+│   └── db.ts           # SQLite 数据库操作
+├── agent/
+│   ├── loop.ts         # Agent 核心循环
+│   ├── doomDetect.ts   # 精确 doom loop 检测
+│   ├── tools.ts        # 工具定义 + 并发执行 + 输出截断
+│   ├── checkpoint.ts   # 任务可恢复性（checkpoint）
+│   └── compaction.ts   # 会话压缩
+├── skill/              # Skill 系统
+│   ├── types.ts        # Skill 类型定义
+│   ├── discovery.ts    # Skill 发现（从目录加载）
+│   ├── service.ts      # Skill 管理服务
+│   └── presets/        # 预置 Skills（6个）
+├── tool/
+│   ├── websearch.ts    # 网页搜索（多 provider fallback）
+│   ├── webfetch.ts     # 网页内容获取
+│   ├── task.ts         # 后台任务管理
+│   ├── notebook.ts     # Jupyter notebook 编辑
+│   └── skill.ts        # Skill 工具
+├── mcp/                # MCP (Model Context Protocol) 支持
+│   ├── types.ts        # MCP 类型定义
+│   ├── client.ts       # MCP Client（stdio/HTTP）
+│   └── manager.ts      # MCP Server 管理
+├── plugin/             # Plugin 系统
+│   ├── types.ts        # Plugin 接口定义
+│   ├── loader.ts       # 动态加载
+│   └── registry.ts     # Plugin 注册表
+├── bridge/             # Remote Session Bridge（WebSocket）
+│   ├── types.ts        # Bridge 类型
+│   └── server.ts       # WebSocket Server
+├── bus/                # PubSub 事件系统
+│   ├── types.ts        # 事件类型定义
+│   └── index.ts        # Bus 实现
+└── permission/
+    └── classifier.ts    # YOLO 权限分类器（学习用户授权模式）
 ```
 
 ## 核心模块
@@ -68,8 +98,13 @@ packages/core/src/
 - 路径遍历检测（../）
 - 危险命令检测（rm -rf /, fork bomb, curl|sh）
 
+**YOLO 权限分类器**（`src/permission/classifier.ts`）：
+- 学习用户授权模式，自动批准/拒绝操作
+- 基于历史授权记录训练简单规则
+- 匹配规则：命令模式 + 路径模式 → 授权决策
+
 ### Tools (src/agent/tools.ts)
-6 个内置工具，支持并发执行。所有工具路径支持 `~` 展开为用户目录。
+13 个内置工具，支持并发执行。所有工具路径支持 `~` 展开为用户目录。
 
 | 工具 | 并发安全 | 说明 |
 |------|---------|------|
@@ -79,6 +114,13 @@ packages/core/src/
 | bash | ✗ | 执行命令，错误格式 `Error (exit code N): ...` |
 | write | ✗ | 写文件（~ 展开） |
 | edit | ✗ | 替换文件内容（~ 展开） |
+| websearch | ✓ | 网页搜索（多 provider fallback：Bing + Searx） |
+| webfetch | ✓ | 获取网页内容 |
+| task | ✓ | 创建后台任务 |
+| task_result | ✓ | 获取任务结果 |
+| task_list | ✓ | 列出所有任务 |
+| notebook | ✓ | Jupyter notebook 编辑 |
+| skill | ✓ | 调用预置/用户 Skills |
 
 ### Config (src/config.ts)
 - hybrid-agent 自己的配置直接使用
@@ -118,6 +160,37 @@ HYBRID_AGENT_URL=http://localhost:3000 pnpm repl
 - `:quit` — 退出 REPL
 
 **快捷键：** `Ctrl+C` 中断当前任务，`Ctrl+D` 退出，`Ctrl+L` 清屏
+
+### Skills (src/skill/)
+可复用的提示模板系统，类似 Claude Code 的 Skills。
+
+**搜索目录（优先级递减）：**
+1. `packages/core/src/skill/presets/` — 预置 Skills（随项目分发）
+2. `~/.agents/skills/` — 用户 agent skills
+3. `~/.claude/skills/` — Claude Code skills
+4. `~/.hybrid-agent/skills/` — hybrid-agent 用户 skills
+5. 项目 `.hybrid-agent/skills/` 或 `skills/`
+
+**预置 Skills（6个）：**
+- `agent-browser` — AI Agent 优化的无头浏览器自动化
+- `find-skills` — 搜索和发现 OpenClaw skills
+- `github` — 使用 `gh` CLI 与 GitHub 交互
+- `multi-search-engine` — 16 个搜索引擎集成
+- `self-improvement` — 记录学习、错误和修正，持续改进
+- `skill-creator` — 创建和优化新技能
+
+**SKILL.md 格式：**
+```markdown
+---
+name: my-skill
+description: When to trigger and what it does
+---
+
+# Skill Content
+Your prompt template here...
+```
+
+**模板变量**：`{{args}}` 和 `{% if args %}...{% endif %}`
 
 ## 开发
 

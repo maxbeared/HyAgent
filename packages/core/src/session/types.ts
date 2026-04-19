@@ -6,7 +6,7 @@
  * - Anthropic-Leaked-Source-Code/query/tokenBudget.ts
  */
 
-import type { Effect } from 'effect'
+import { Context, Effect } from 'effect'
 
 // ============================================================================
 // Message Types

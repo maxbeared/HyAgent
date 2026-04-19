@@ -22,15 +22,21 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "ai": "^3.0.0",
+    "better-sqlite3": "^12.9.0",
     "effect": "^3.0.0",
+    "front-matter": "^4.0.2",
     "glob": "^13.0.6",
     "hono": "^4.0.0",
     "tsx": "^4.0.0",
+    "ws": "^8.20.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.11.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.4.0",
     "vitest": "^4.1.4"
   }
