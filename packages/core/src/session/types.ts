@@ -34,6 +34,15 @@ export interface Message {
 }
 
 /**
+ * Permission modes for session security (simplified to 4 modes)
+ */
+export type PermissionMode =
+  | 'permissive'    // Allow all operations (dangerous, use with caution)
+  | 'default'       // Allow safe ops, ask for dangerous
+  | 'askAll'        // Ask for all operations
+  | 'plan'          // Planning mode, can create plans but not modify files
+
+/**
  * Session state
  */
 export interface Session {
@@ -46,6 +55,7 @@ export interface Session {
   metadata?: Record<string, unknown>
   parentId?: string // Fork source session ID
   forkCount?: number // Number of times this session has been forked
+  permissionMode?: PermissionMode // Permission mode for this session
 }
 
 // ============================================================================

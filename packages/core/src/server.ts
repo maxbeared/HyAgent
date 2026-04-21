@@ -44,6 +44,7 @@ import {
   dbGetSession,
   dbUpdateSession,
   dbUpdateSessionMessages,
+  dbUpdateSessionPermissionMode,
   dbDeleteSession,
   dbListSessions,
   dbForkSession,
@@ -485,6 +486,30 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     return c.json({ success: true })
   })
 
+  // ---- Session Permission Mode ----
+
+  app.get('/api/sessions/:id/permission-mode', c => {
+    const session = dbGetSession(c.req.param('id'))
+    if (!session) return c.json({ error: 'Session not found' }, 404)
+    return c.json({ permissionMode: session.permissionMode ?? 'default' })
+  })
+
+  app.put('/api/sessions/:id/permission-mode', async c => {
+    const sessionId = c.req.param('id')
+    const session = dbGetSession(sessionId)
+    if (!session) return c.json({ error: 'Session not found' }, 404)
+
+    const { permissionMode } = await c.req.json()
+    const validModes = ['permissive', 'default', 'askAll', 'plan']
+    if (!validModes.includes(permissionMode)) {
+      return c.json({ error: `Invalid permission mode. Must be one of: ${validModes.join(', ')}` }, 400)
+    }
+
+    session.updatedAt = Date.now()
+    dbUpdateSessionPermissionMode(sessionId, permissionMode, session.updatedAt)
+    return c.json({ success: true, permissionMode })
+  })
+
   // ---- Session Fork ----
 
   app.post('/api/sessions/:id/fork', c => {
@@ -612,9 +637,10 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
   // ---- Tools ----
 
   app.post('/api/tools/execute', async c => {
-    const { tool, input } = await c.req.json()
+    const { tool, input, permissionMode } = await c.req.json()
     try {
-      const result = await executeTool(tool, input)
+      // Pass permission mode to allow dangerous ops in bypassPermissions mode
+      const result = await executeTool(tool, input, undefined, permissionMode)
       return c.json(result)
     } catch (e: any) {
       return c.json({ error: e.message }, 500)
@@ -684,7 +710,6 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${cfg.apiKey}`,
           'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({ model: targetModel, max_tokens: 4096, messages: apiMessages }),
       })
@@ -736,8 +761,16 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     const userMsg = { id: `msg_${Date.now()}`, role: 'user' as const, parts: [{ type: 'text' as const, content }], timestamp: Date.now() }
     session.messages.push(userMsg)
 
-    // Run agent loop with session history
-    const result = await runAgentLoop(content, agentCfg(), maxIterations ?? 30, history as any, undefined, session.id)
+    // Run agent loop with session history and permission mode
+    const result = await runAgentLoop(
+      content,
+      agentCfg(),
+      maxIterations ?? 30,
+      history as any,
+      undefined,
+      session.id,
+      session.permissionMode as any
+    )
 
     // Append assistant messages from the loop to session
     // The loop returned the result; we need to add the assistant turn(s)
@@ -785,7 +818,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
     session.updatedAt = Date.now()
 
     return streamSSE(c, async stream => {
-      for await (const event of runAgentLoopStream(task, agentCfg(), 30, history as any, undefined, session.id)) {
+      for await (const event of runAgentLoopStream(task, agentCfg(), 30, history as any, undefined, session.id, session.permissionMode as any)) {
         await stream.writeSSE({ data: JSON.stringify(event) })
         // On completion, append the assistant message to session
         if (event.type === 'done' && event.content) {

@@ -15,12 +15,10 @@
  * 来自: Anthropic-Leaked-Source-Code/types/permissions.ts
  */
 export type PermissionMode =
-  | 'acceptEdits'   // 自动允许编辑操作
-  | 'bypassPermissions' // 绕过所有权限检查 (谨慎使用)
-  | 'default'       // 默认权限检查
-  | 'dontAsk'       // 不询问，自动拒绝
-  | 'plan'          // Planning模式，权限会bubble到父级
-  | 'auto'          // 自动模式，使用AI分类器决策
+  | 'permissive'    // 允许所有操作（危险，仅受控环境使用）
+  | 'default'       // 默认权限检查，询问危险操作
+  | 'askAll'        // 询问所有操作
+  | 'plan'          // 规划模式，可以制定计划但不能修改文件
 
 /**
  * Permission behavior when rules match

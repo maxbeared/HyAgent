@@ -72,7 +72,13 @@ You have access to tools to:
 - Task is complete when all tests pass and no errors
 - Report clearly when the task is complete with a summary of changes made
 - If the task cannot be completed, explain what was tried and why it failed
-- Suggest next steps when appropriate`
+- Suggest next steps when appropriate
+
+## Information Gathering
+- When a command returns useful results, STOP issuing more commands and summarize the findings
+- Do NOT keep running variations of the same command - use the results you already have
+- If a command succeeds, incorporate that information into your response
+- Only retry a command if it FAILED and you can fix the issue; success means you have the data`
 
 // ---- Stop Reason Types ----
 
@@ -107,7 +113,7 @@ export interface AgentConfig {
 }
 
 export interface AgentStreamEvent {
-  type: 'text' | 'tool_start' | 'tool_result' | 'compaction' | 'done' | 'error' | 'retry'
+  type: 'text' | 'tool_start' | 'tool_result' | 'compaction' | 'done' | 'error' | 'retry' | 'permission_required'
   content?: string
   toolName?: string
   toolId?: string
@@ -119,6 +125,11 @@ export interface AgentStreamEvent {
   error?: string
   stopReason?: StopReason
   stopDetail?: StopDetail
+  // Permission-specific fields
+  permissionTool?: string
+  permissionInput?: unknown
+  permissionReasons?: string[]
+  permissionSessionId?: string
 }
 
 export interface AgentResult {
@@ -198,6 +209,43 @@ function formatAPIError(status: number, rawBody: string): { message: string; ret
  * - status: HTTP status code
  * - rawError: original error object
  */
+/**
+ * Convert Message to API content format
+ * Handles both parts-based messages and legacy content-based messages
+ */
+function messageToApiContent(msg: Message): string | Array<any> {
+  // Handle parts-based messages (proper Message type)
+  if (msg.parts && msg.parts.length > 0) {
+    if (msg.parts.length === 1 && msg.parts[0].type === 'text') {
+      return msg.parts[0].content
+    }
+    return msg.parts.map(p => {
+      if (p.type === 'text') {
+        return { type: 'text', text: p.content }
+      }
+      if (p.type === 'tool_use') {
+        return { type: 'tool_use', id: p.callID, name: p.tool, input: p.input }
+      }
+      if (p.type === 'tool_result') {
+        return { type: 'tool_result', tool_use_id: p.callID, content: p.content }
+      }
+      return { type: 'text', text: '' }
+    })
+  }
+
+  // Handle content-based messages (for backward compatibility)
+  if (msg.content) {
+    if (typeof msg.content === 'string') {
+      return msg.content
+    }
+    if (Array.isArray(msg.content)) {
+      return msg.content
+    }
+  }
+
+  return ''
+}
+
 async function callLLM(
   messages: Message[],
   cfg: AgentConfig,
@@ -208,7 +256,10 @@ async function callLLM(
     model: cfg.model,
     max_tokens: maxTokens,
     system: SYSTEM_PROMPT,
-    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    messages: messages.map(m => {
+      const content = messageToApiContent(m)
+      return { role: m.role, content }
+    }),
     tools: TOOL_DEFINITIONS,
     tool_choice: { type: 'auto' },
   })
@@ -219,7 +270,6 @@ async function callLLM(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${cfg.apiKey}`,
       'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body,
   })
@@ -306,6 +356,8 @@ function calculateRetryDelay(attempt: number, serverSuggestedMs?: number): numbe
  * @param maxIterations - Max loop iterations (default 30)
  * @param initialMessages - Existing conversation history (for continuing a chat session)
  * @param maxTurns     - Optional max turns (for stop_reason reporting)
+ * @param sessionId    - Session ID for permission mode lookup
+ * @param permissionMode - Permission mode override (optional, defaults to 'default')
  */
 export async function* runAgentLoopStream(
   task: string,
@@ -314,11 +366,18 @@ export async function* runAgentLoopStream(
   initialMessages?: Message[],
   maxTurns?: number,
   sessionId?: string,
+  permissionMode: 'permissive' | 'default' | 'askAll' | 'plan' = 'default',
 ): AsyncGenerator<AgentStreamEvent> {
   // Start with existing history if provided, otherwise start fresh
+  const newUserMsg: Message = {
+    id: `msg_${Date.now()}`,
+    role: 'user',
+    parts: [{ type: 'text', content: task }],
+    timestamp: Date.now(),
+  }
   const messages: Message[] = initialMessages
-    ? [...initialMessages, { role: 'user' as const, content: task }]
-    : [{ role: 'user' as const, content: task }]
+    ? [...initialMessages, newUserMsg]
+    : [newUserMsg]
 
   let iterations = 0
   let totalInputTokens = 0
@@ -341,10 +400,11 @@ export async function* runAgentLoopStream(
     })
 
     // ---- Call LLM (with retry loop — yields retry events immediately after failure) ----
-    let data: any
+    let apiResponse: any
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        data = await callLLM(messages, cfg)
+        const result = await callLLM(messages, cfg)
+        apiResponse = result.data
         // Success — done with LLM calls
         break
       } catch (e: any) {
@@ -409,12 +469,12 @@ export async function* runAgentLoopStream(
     }
 
     // ---- Track token usage ----
-    totalInputTokens += data.usage?.input_tokens ?? 0
-    totalOutputTokens += data.usage?.output_tokens ?? 0
+    totalInputTokens += apiResponse.usage?.input_tokens ?? 0
+    totalOutputTokens += apiResponse.usage?.output_tokens ?? 0
     const totalTokens = totalInputTokens + totalOutputTokens
 
     // ---- Parse response blocks ----
-    const blocks: any[] = data.content ?? []
+    const blocks: any[] = apiResponse.content ?? []
     const textBlocks = blocks.filter((b: any) => b.type === 'text')
     const toolUseBlocks = blocks.filter((b: any) => b.type === 'tool_use')
 
@@ -428,7 +488,7 @@ export async function* runAgentLoopStream(
     // ---- Check stop reason ----
     // Note: stop_reason === 'tool_use' is unreliable — it's not always set correctly.
     // We use our own logic based on whether tool_use blocks exist.
-    const stopReason: string = data.stop_reason ?? 'end_turn'
+    const stopReason: string = apiResponse.stop_reason ?? 'end_turn'
 
     if (stopReason === 'end_turn' || toolUseBlocks.length === 0) {
       // Task complete
@@ -560,11 +620,26 @@ export async function* runAgentLoopStream(
       console.log(`[Agent] Tool: ${tc.name} ${JSON.stringify(tc.input).slice(0, 100)}`)
     }
 
-    const results = await executeToolCallsConcurrently(toolCalls)
+    const results = await executeToolCallsConcurrently(toolCalls, undefined, permissionMode)
     toolsUsed += results.length
 
-    // Check for tool execution errors
-    const hasErrors = results.some(r => !r.result.success)
+    // Check for permission-required results - yield event and add to message for LLM to handle
+    const permissionRequiredResults = results.filter(r => r.result.requiresPermission)
+    for (const pr of permissionRequiredResults) {
+      // Find the original tool call input
+      const originalCall = toolCalls.find(tc => tc.id === pr.id)
+      yield {
+        type: 'permission_required',
+        toolName: pr.name,
+        toolId: pr.id,
+        toolInput: originalCall?.input ?? pr.result.output,
+        permissionReasons: pr.result.permissionReasons,
+        permissionSessionId: sessionId,
+      }
+    }
+
+    // Check for tool execution errors (excluding permission-required which aren't really errors)
+    const hasErrors = results.some(r => !r.result.success && !r.result.requiresPermission)
 
     // Build tool_result user message
     const toolResultContent = results.map(r => ({
@@ -692,11 +767,12 @@ export async function runAgentLoop(
   initialMessages?: Message[],
   maxTurns?: number,
   sessionId?: string,
+  permissionMode: 'permissive' | 'default' | 'askAll' | 'plan' = 'default',
 ): Promise<AgentResult> {
   const textParts: string[] = []
   let lastEvent: AgentStreamEvent | null = null
 
-  for await (const event of runAgentLoopStream(task, cfg, maxIterations, initialMessages, maxTurns, sessionId)) {
+  for await (const event of runAgentLoopStream(task, cfg, maxIterations, initialMessages, maxTurns, sessionId, permissionMode)) {
     lastEvent = event
     if (event.type === 'text' && event.content) {
       textParts.push(event.content)

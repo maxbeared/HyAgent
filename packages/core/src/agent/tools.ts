@@ -32,6 +32,8 @@ export interface ToolResult {
   output: string
   success: boolean
   truncated?: boolean
+  requiresPermission?: boolean  // True when dangerous op needs user confirmation
+  permissionReasons?: string[]  // Reasons why permission is needed
 }
 
 function truncateOutput(output: string): string {
@@ -482,10 +484,33 @@ export function isToolAvailableForAgent(toolName: string, agentType: AgentType):
   return allowedTools.includes(toolName)
 }
 
-async function executeBash(input: { command: string; cwd?: string; timeout?: number }, signal?: AbortSignal): Promise<ToolResult> {
-  const safety = checkCommandSafety(input.command)
-  if (!safety.isSafe) {
-    return { output: `Command blocked: ${safety.reasons.join('; ')}`, success: false }
+async function executeBash(input: { command: string; cwd?: string; timeout?: number }, signal?: AbortSignal, permissionMode?: string): Promise<ToolResult> {
+  // In permissive mode, skip all safety checks
+  if (permissionMode !== 'permissive') {
+    const safety = checkCommandSafety(input.command)
+    if (!safety.isSafe) {
+      // Critical safety issues (path traversal, protected paths, etc.) are always blocked
+      const criticalReasons = ['Path traversal', 'Protected path', 'Shell config', 'Root delete']
+      const isCritical = safety.reasons.some(r => criticalReasons.some(c => r.includes(c)))
+
+      if (isCritical) {
+        return { output: `Command blocked: ${safety.reasons.join('; ')}`, success: false }
+      }
+
+      // Non-critical issues: return requiresPermission instead of blocking
+      // The agent loop will ask the user for confirmation
+      if (permissionMode === 'default') {
+        return {
+          output: `[Permission required] ${safety.reasons.join('; ')}`,
+          success: false,
+          requiresPermission: true,
+          permissionReasons: safety.reasons,
+        }
+      }
+
+      // In safe/plan modes, block non-critical dangerous commands too
+      return { output: `Command blocked: ${safety.reasons.join('; ')}`, success: false }
+    }
   }
 
   // Check abort before starting
@@ -553,7 +578,7 @@ async function executeRead(input: { path: string; offset?: number; limit?: numbe
   }
 }
 
-async function executeWrite(input: { path: string; content: string }, signal?: AbortSignal): Promise<ToolResult> {
+async function executeWrite(input: { path: string; content: string }, signal?: AbortSignal, permissionMode?: string): Promise<ToolResult> {
   // Check abort before starting
   if (signal?.aborted) {
     return { output: 'Execution cancelled', success: false }
@@ -565,6 +590,19 @@ async function executeWrite(input: { path: string; content: string }, signal?: A
     : input.path
   const safety = checkPathSafety(resolvedPath)
   if (!safety.isSafe) {
+    // Path traversal and protected paths are always blocked
+    if (safety.pathType === 'blocked' || safety.pathType === 'dangerous') {
+      return { output: `Path blocked: ${safety.reason}`, success: false }
+    }
+    // In default mode, ask for permission instead of blocking
+    if (permissionMode === 'default') {
+      return {
+        output: `[Permission required] ${safety.reason}`,
+        success: false,
+        requiresPermission: true,
+        permissionReasons: [safety.reason ?? 'Path safety check failed'],
+      }
+    }
     return { output: `Path blocked: ${safety.reason}`, success: false }
   }
   try {
@@ -577,7 +615,7 @@ async function executeWrite(input: { path: string; content: string }, signal?: A
   }
 }
 
-async function executeEdit(input: { path: string; old_string: string; new_string: string }, signal?: AbortSignal): Promise<ToolResult> {
+async function executeEdit(input: { path: string; old_string: string; new_string: string }, signal?: AbortSignal, permissionMode?: string): Promise<ToolResult> {
   // Check abort before starting
   if (signal?.aborted) {
     return { output: 'Execution cancelled', success: false }
@@ -589,6 +627,19 @@ async function executeEdit(input: { path: string; old_string: string; new_string
     : input.path
   const safety = checkPathSafety(resolvedPath)
   if (!safety.isSafe) {
+    // Path traversal and protected paths are always blocked
+    if (safety.pathType === 'blocked' || safety.pathType === 'dangerous') {
+      return { output: `Path blocked: ${safety.reason}`, success: false }
+    }
+    // In default mode, ask for permission instead of blocking
+    if (permissionMode === 'default') {
+      return {
+        output: `[Permission required] ${safety.reason}`,
+        success: false,
+        requiresPermission: true,
+        permissionReasons: [safety.reason ?? 'Path safety check failed'],
+      }
+    }
     return { output: `Path blocked: ${safety.reason}`, success: false }
   }
   try {
@@ -883,12 +934,12 @@ async function executePlanExit(input: { approve: boolean; reason?: string }, sig
   }
 }
 
-export async function executeTool(name: string, input: any, signal?: AbortSignal): Promise<ToolResult> {
+export async function executeTool(name: string, input: any, signal?: AbortSignal, permissionMode?: string): Promise<ToolResult> {
   switch (name) {
-    case 'bash': return executeBash(input, signal)
+    case 'bash': return executeBash(input, signal, permissionMode)
     case 'read': return executeRead(input, signal)
-    case 'write': return executeWrite(input, signal)
-    case 'edit': return executeEdit(input, signal)
+    case 'write': return executeWrite(input, signal, permissionMode)
+    case 'edit': return executeEdit(input, signal, permissionMode)
     case 'glob': return executeGlob(input, signal)
     case 'grep': return executeGrep(input, signal)
     case 'websearch': return executeWebSearch(input, signal)
@@ -917,6 +968,7 @@ export async function executeTool(name: string, input: any, signal?: AbortSignal
 export async function executeToolCallsConcurrently(
   toolCalls: Array<{ id: string; name: string; input: any }>,
   signal?: AbortSignal,
+  permissionMode?: string,
 ): Promise<Array<{ id: string; name: string; result: ToolResult }>> {
   // Check if already aborted
   if (signal?.aborted) {
@@ -959,7 +1011,7 @@ export async function executeToolCallsConcurrently(
         return {
           id: tc.id,
           name: tc.name,
-          result: await executeTool(tc.name, tc.input, signal),
+          result: await executeTool(tc.name, tc.input, signal, permissionMode),
         }
       })
     )
@@ -971,7 +1023,7 @@ export async function executeToolCallsConcurrently(
       sequentialResults.push({
         id: tc.id,
         name: tc.name,
-        result: await executeTool(tc.name, tc.input, signal),
+        result: await executeTool(tc.name, tc.input, signal, permissionMode),
       })
     }
 

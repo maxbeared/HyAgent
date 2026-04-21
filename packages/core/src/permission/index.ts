@@ -205,7 +205,7 @@ export function createDefaultContext(additionalRules?: Ruleset): PermissionConte
  */
 export function createPermissiveContext(): PermissionContext {
   return {
-    mode: 'bypassPermissions',
+    mode: 'permissive',
     additionalWorkingDirectories: new Map(),
     alwaysAllowRules: [{ permission: '*', pattern: '*', action: 'allow' }],
     alwaysDenyRules: [],
@@ -219,7 +219,7 @@ export function createPermissiveContext(): PermissionContext {
  */
 export function createRestrictiveContext(): PermissionContext {
   return {
-    mode: 'dontAsk',
+    mode: 'plan',
     additionalWorkingDirectories: new Map(),
     alwaysAllowRules: [
       // Only allow safe read operations

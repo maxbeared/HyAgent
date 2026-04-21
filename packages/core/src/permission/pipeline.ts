@@ -201,8 +201,8 @@ function step2a_checkModeBypass(
   toolName: string,
   input: unknown
 ): PipelineStepResult | null {
-  // bypassPermissions mode skips most checks
-  if (mode === 'bypassPermissions' && context.isBypassPermissionsModeAvailable) {
+  // permissive mode skips most checks
+  if (mode === 'permissive' && context.isBypassPermissionsModeAvailable) {
     // But still check bypass-immune paths
     if (input && typeof input === 'object' && 'path' in input) {
       const path = String((input as Record<string, unknown>).path)
@@ -210,7 +210,7 @@ function step2a_checkModeBypass(
         return {
           behavior: 'deny',
           step: 4,
-          reason: `Path ${path} is protected even in bypass mode`,
+          reason: `Path ${path} is protected even in permissive mode`,
         }
       }
     }
@@ -218,7 +218,7 @@ function step2a_checkModeBypass(
   }
 
   // plan mode with bypass available
-  if (mode === 'plan' && context.prePlanMode === 'bypassPermissions') {
+  if (mode === 'plan' && context.prePlanMode === 'permissive') {
     return null
   }
 

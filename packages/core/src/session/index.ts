@@ -21,6 +21,7 @@ import {
   dbGetSession,
   dbUpdateSession,
   dbUpdateSessionMetadata,
+  dbUpdateSessionPermissionMode,
   dbDeleteSession,
   dbListSessions,
   dbForkSession,

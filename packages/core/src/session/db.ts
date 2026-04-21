@@ -44,7 +44,8 @@ function initDatabase(): Database.Database {
       updated_at INTEGER NOT NULL,
       metadata TEXT DEFAULT '{}',
       parent_id TEXT,
-      fork_count INTEGER DEFAULT 0
+      fork_count INTEGER DEFAULT 0,
+      permission_mode TEXT DEFAULT 'default'
     );
 
     CREATE TABLE IF NOT EXISTS checkpoints (
@@ -72,6 +73,11 @@ function initDatabase(): Database.Database {
   }
   try {
     db.exec(`ALTER TABLE sessions ADD COLUMN fork_count INTEGER DEFAULT 0`)
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN permission_mode TEXT DEFAULT 'default'`)
   } catch {
     // Column already exists
   }
@@ -119,6 +125,7 @@ export interface DbSession {
   metadata: string // JSON string
   parent_id: string | null
   fork_count: number
+  permission_mode: string | null
 }
 
 export interface DbCheckpoint {
@@ -173,6 +180,7 @@ export function dbGetSession(id: string): Session | undefined {
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     parentId: row.parent_id ?? undefined,
     forkCount: row.fork_count,
+    permissionMode: (row.permission_mode ?? 'default') as Session['permissionMode'],
   }
 }
 
@@ -189,6 +197,21 @@ export function dbUpdateSession(
     UPDATE sessions SET messages = ?, updated_at = ? WHERE id = ?
   `)
   stmt.run(JSON.stringify(messages), updatedAt, id)
+}
+
+/**
+ * Update session permission mode
+ */
+export function dbUpdateSessionPermissionMode(
+  id: string,
+  permissionMode: string,
+  updatedAt: number
+): void {
+  const db = getDatabase()
+  const stmt = db.prepare(`
+    UPDATE sessions SET permission_mode = ?, updated_at = ? WHERE id = ?
+  `)
+  stmt.run(permissionMode, updatedAt, id)
 }
 
 /**
@@ -248,6 +271,7 @@ export function dbListSessions(): Session[] {
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     parentId: row.parent_id ?? undefined,
     forkCount: row.fork_count,
+    permissionMode: (row.permission_mode ?? 'default') as Session['permissionMode'],
   }))
 }
 
@@ -362,6 +386,7 @@ export function dbGetChildSessions(parentId: string): Session[] {
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     parentId: row.parent_id ?? undefined,
     forkCount: row.fork_count,
+    permissionMode: (row.permission_mode ?? 'default') as Session['permissionMode'],
   }))
 }
 
