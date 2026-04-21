@@ -12,5 +12,10 @@
   "devDependencies": {
     "turbo": "^2.0.0",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@types/inquirer": "^9.0.9",
+    "inquirer": "^9.3.8",
+    "inquirer-autocomplete-prompt": "^3.0.1"
   }
 }

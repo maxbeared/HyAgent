@@ -24,7 +24,7 @@ export interface CommandCheckResult {
 const BLOCKED_DEVICE_PATHS = [
   '/dev/zero', '/dev/random', '/dev/urandom',
   '/dev/stdin', '/dev/tty', '/dev/stdout', '/dev/stderr',
-  '/dev/null',
+  // /dev/null is intentionally allowed - it's standard for output redirection
 ]
 
 const PROTECTED_PATH_PATTERNS = [
@@ -127,7 +127,8 @@ const ADDITIONAL_DANGEROUS_PATTERNS = [
 
 export function checkPathSafety(filePath: string): PathCheckResult {
   // UNC path blocking (Windows network paths - prevent NTLM leaks)
-  if (filePath.startsWith('\\\\') || filePath.startsWith('//')) {
+  // Only block actual UNC paths like //server/share, not //c/ drive letters (Git Bash style)
+  if (filePath.startsWith('\\\\') || (filePath.startsWith('//') && !filePath.match(/^\/\/[a-zA-Z]\//))) {
     return { isSafe: false, reason: 'UNC paths are blocked', pathType: 'blocked' }
   }
 
@@ -178,10 +179,11 @@ export function checkCommandSafety(command: string): CommandCheckResult {
     if (pattern.test(command)) reasons.push(reason)
   }
 
-  // 3. Check brace expansion
-  if (BRACE_EXPANSION_PATTERN.test(command)) {
-    reasons.push('Brace expansion can bypass argument parsing')
-  }
+  // 3. Check brace expansion (DISABLED - too aggressive, causes false positives with PowerShell)
+  // PowerShell uses {} for hashtables and script blocks, not bash-style brace expansion
+  // if (BRACE_EXPANSION_PATTERN.test(command)) {
+  //   reasons.push('Brace expansion can bypass argument parsing')
+  // }
 
   // 4. Check obfuscated flags
   for (const { pattern, reason } of OBFUSCATED_PATTERNS) {
