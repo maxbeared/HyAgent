@@ -185,6 +185,12 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
     isReadOnly: () => false,
     maxResultSizeChars: 8_000,
   },
+  plan_exit: {
+    searchHint: 'approve plan proceed exit',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    maxResultSizeChars: 500,
+  },
 }
 
 /**
@@ -244,7 +250,7 @@ export function getUserFacingName(toolName: string, input?: unknown): string {
 // ============================================================================
 
 // Tools that are safe to run concurrently (read-only operations)
-export const CONCURRENT_SAFE_TOOLS = new Set(['read', 'glob', 'grep', 'websearch', 'webfetch', 'task', 'task_result', 'task_list', 'notebook', 'skill'])
+export const CONCURRENT_SAFE_TOOLS = new Set(['read', 'glob', 'grep', 'websearch', 'webfetch', 'task', 'task_result', 'task_list', 'notebook', 'skill', 'plan_exit'])
 
 // Anthropic tool_use schema definitions
 export const TOOL_DEFINITIONS = [
@@ -404,6 +410,18 @@ export const TOOL_DEFINITIONS = [
         args: { type: 'string', description: 'Optional arguments for the skill' },
       },
       required: ['skill'],
+    },
+  },
+  {
+    name: 'plan_exit',
+    description: 'Exit plan mode and proceed with implementation or request changes. Use this when a plan is ready for approval or needs revision.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        approve: { type: 'boolean', description: 'Whether to approve the plan and proceed with implementation' },
+        reason: { type: 'string', description: 'Reason for approval or rejection (optional for approval, recommended for rejection)' },
+      },
+      required: ['approve'],
     },
   },
 ]
@@ -840,6 +858,31 @@ async function executeSkill(input: { skill: string; args?: string }, signal?: Ab
   }
 }
 
+async function executePlanExit(input: { approve: boolean; reason?: string }, signal?: AbortSignal): Promise<ToolResult> {
+  // Check abort before starting
+  if (signal?.aborted) {
+    return { output: 'Execution cancelled', success: false }
+  }
+
+  const { processPlanExit } = await import('./planMode.js')
+
+  const result = processPlanExit(input.approve, input.reason)
+
+  if (result.approved) {
+    return {
+      output: 'Plan approved. Proceeding with implementation.\n\n' +
+        'The plan will be executed step by step. You can use /stop to interrupt at any time.',
+      success: true,
+    }
+  } else {
+    return {
+      output: `Plan ${input.approve ? 'approved' : 'rejected'}${result.reason ? `: ${result.reason}` : ''}.\n\n` +
+        'Please revise the plan based on feedback and run plan_exit again when ready.',
+      success: true,
+    }
+  }
+}
+
 export async function executeTool(name: string, input: any, signal?: AbortSignal): Promise<ToolResult> {
   switch (name) {
     case 'bash': return executeBash(input, signal)
@@ -855,6 +898,7 @@ export async function executeTool(name: string, input: any, signal?: AbortSignal
     case 'task_list': return executeTaskList(input, signal)
     case 'notebook': return executeNotebook(input, signal)
     case 'skill': return executeSkill(input, signal)
+    case 'plan_exit': return executePlanExit(input, signal)
     default: return { output: `Unknown tool: ${name}`, success: false }
   }
 }

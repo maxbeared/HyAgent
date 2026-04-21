@@ -13,7 +13,7 @@
 | 模块 | 文件 | 关键特性 |
 |------|------|----------|
 | Agent Loop | `src/agent/loop.ts` | doom检测、重试、SSE流、checkpoint、hooks、增强系统提示 |
-| Tools | `src/agent/tools.ts` | 13工具、并发执行、abort signal、agent类型过滤、Claude Code风格元数据 |
+| Tools | `src/agent/tools.ts` | 14工具、并发执行、abort signal、agent类型过滤、Claude Code风格元数据、plan_exit |
 | Permission | `src/permission/` | Zsh攻击检测、拒绝追踪、wildcard规则匹配 |
 | Session | `src/session/` | SQLite持久化、fork、checkpoint |
 | MCP | `src/mcp/` | OAuth、Prompts/Resources、多transport |
@@ -22,8 +22,30 @@
 | Provider | `src/provider/` | LiteLLM/Bedrock转换 |
 | Hooks | `src/agent/hooks.ts` | onTurnEnd/onTaskComplete等生命周期 |
 | Tool Budget | `src/tool/toolResultBudget.ts` | 工具结果预算、输出持久化、自动清理 |
+| Task Decompose | `src/agent/taskDecompose.ts` | 任务分解、依赖跟踪、并行任务执行 |
+| Verification | `src/agent/verification.ts` | 对抗性测试、构建验证、测试运行、回归检测 |
+| Plan Mode | `src/agent/planMode.ts` | 5阶段规划工作流、探索agent、设计、实施、审批 |
 
 ## 质量优化特性
+
+### 任务分解 (Task Decomposition)
+- 复杂任务分解为可并行的子任务
+- 依赖关系跟踪，确保执行顺序正确
+- 支持嵌套任务树
+- 进度追踪和结果聚合
+
+### 验证 Agent (Verification Agent)
+- **对抗性测试原则**: "你的工作不是确认实现有效，而是尝试破坏它"
+- 必需验证步骤：build → test → linter → type-check
+- 边界值测试、幂等性检查、错误处理探测
+- 自动发现项目验证命令（从package.json读取）
+
+### Plan Mode (5阶段工作流)
+1. **Understanding**: 并行启动探索agent，理解问题空间
+2. **Design**: 基于发现设计实现方案
+3. **Review**: 评审计划完整性和正确性
+4. **Final**: 将最终计划写入计划文件
+5. **Approval**: 通过plan_exit tool请求用户批准
 
 ### Doom Loop 检测增强
 - **Exact Loop**: 相同工具+相同输入重复N次
