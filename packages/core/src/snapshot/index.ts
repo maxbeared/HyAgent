@@ -5,6 +5,7 @@
  * - Git-based snapshot creation for session files
  * - File diff tracking
  * - Restore from snapshot
+ * - Incremental patch tracking per step (Claude Code-style)
  *
  * Reference: opencode/packages/opencode/src/snapshot/index.ts
  */
@@ -41,6 +42,130 @@ export interface SnapshotOptions {
 }
 
 // ============================================================================
+// Incremental Patch Tracking (Claude Code-style)
+// ============================================================================
+
+/**
+ * Represents a single step's file changes
+ */
+export interface StepPatch {
+  stepId: string
+  sessionId: string
+  createdAt: number
+  files: PatchFile[]
+}
+
+/**
+ * A single file change in a step
+ */
+export interface PatchFile {
+  path: string
+  status: 'added' | 'deleted' | 'modified'
+  sizeBytes: number
+  contentHash?: string
+  diffSummary?: string
+}
+
+interface PatchState {
+  patches: StepPatch[]
+  currentStep: number
+  baseHash: string
+}
+
+let patchState: PatchState = {
+  patches: [],
+  currentStep: 0,
+  baseHash: '',
+}
+
+/**
+ * Start tracking a new step
+ */
+export function startStep(sessionId: string): string {
+  const stepId = `${sessionId}_step_${++patchState.currentStep}`
+  return stepId
+}
+
+/**
+ * Track file changes for the current step
+ */
+export function trackStepChanges(stepId: string, files: PatchFile[]): void {
+  const existingIndex = patchState.patches.findIndex(p => p.stepId === stepId)
+  const patch: StepPatch = {
+    stepId,
+    sessionId: stepId.split('_step_')[0],
+    createdAt: Date.now(),
+    files,
+  }
+
+  if (existingIndex >= 0) {
+    patchState.patches[existingIndex] = patch
+  } else {
+    patchState.patches.push(patch)
+  }
+}
+
+/**
+ * Get all patches for the session
+ */
+export function getSessionPatches(sessionId: string): StepPatch[] {
+  return patchState.patches.filter(p => p.sessionId === sessionId)
+}
+
+/**
+ * Get the cumulative patch for a session
+ */
+export function getCumulativePatch(sessionId: string): PatchFile[] {
+  const patches = getSessionPatches(sessionId)
+  const fileMap = new Map<string, PatchFile>()
+
+  for (const patch of patches) {
+    for (const file of patch.files) {
+      if (file.status === 'deleted') {
+        fileMap.delete(file.path)
+      } else {
+        fileMap.set(file.path, file)
+      }
+    }
+  }
+
+  return Array.from(fileMap.values())
+}
+
+/**
+ * Calculate patch summary for compact display
+ */
+export function getPatchSummary(sessionId: string): {
+  totalFiles: number
+  added: number
+  modified: number
+  deleted: number
+  steps: number
+} {
+  const cumulative = getCumulativePatch(sessionId)
+  const patches = getSessionPatches(sessionId)
+
+  return {
+    totalFiles: cumulative.length,
+    added: cumulative.filter(f => f.status === 'added').length,
+    modified: cumulative.filter(f => f.status === 'modified').length,
+    deleted: cumulative.filter(f => f.status === 'deleted').length,
+    steps: patches.length,
+  }
+}
+
+/**
+ * Reset patch state for a new session
+ */
+export function resetPatchState(): void {
+  patchState = {
+    patches: [],
+    currentStep: 0,
+    baseHash: '',
+  }
+}
+
+// ============================================================================
 // Snapshot Storage
 // ============================================================================
 
@@ -63,7 +188,6 @@ function ensureGitRepo(): void {
   ensureSnapshotDir()
   if (!existsSync(join(SNAPSHOT_DIR, '.git'))) {
     execSync('git init', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
-    // Configure git to be minimal
     execSync('git config user.email "hybrid-agent@snapshot"', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
     execSync('git config user.name "Hybrid Agent"', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
   }
@@ -94,11 +218,9 @@ function stageFiles(files: string[]): void {
 function createCommit(message: string): string {
   try {
     execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: SNAPSHOT_DIR, stdio: 'pipe' })
-    // Get the commit hash
     const hash = execSync('git rev-parse HEAD', { cwd: SNAPSHOT_DIR, encoding: 'utf-8' }).trim()
     return hash
-  } catch (e: any) {
-    // No changes to commit
+  } catch {
     return ''
   }
 }
@@ -195,8 +317,8 @@ export function createSnapshot(options: SnapshotOptions): Snapshot {
     hash,
   }
 
-  // Save snapshot metadata
   saveSnapshotMetadata(snapshot)
+  patchState.baseHash = hash
 
   return snapshot
 }
@@ -237,7 +359,6 @@ export function getSessionSnapshots(sessionId: string): Snapshot[] {
     return []
   }
 
-  // Read all .json files in the meta directory
   const snapshots: Snapshot[] = []
 
   return snapshots.sort((a, b) => b.createdAt - a.createdAt)
@@ -277,7 +398,6 @@ export function restoreSnapshot(hash: string): { restored: string[]; errors: str
   const errors: string[] = []
 
   try {
-    // Get files from the snapshot commit
     execSync(`git checkout ${hash} -- .`, { cwd: SNAPSHOT_DIR, stdio: 'pipe' })
     restored.push(...snapshot.files)
   } catch (e: any) {
@@ -301,9 +421,6 @@ export function getFileAtSnapshot(file: string, hash: string): string | undefine
 
 /**
  * Track a file copy in the snapshot directory
- *
- * @param sourcePath Original file path
- * @param destPath Destination path in snapshot dir
  */
 export function trackFile(sourcePath: string, destPath: string): void {
   ensureGitRepo()
@@ -315,7 +432,6 @@ export function trackFile(sourcePath: string, destPath: string): void {
     mkdirSync(destDir, { recursive: true })
   }
 
-  // Copy file
   const content = readFileSync(sourcePath)
   writeFileSync(fullDestPath, content)
 }

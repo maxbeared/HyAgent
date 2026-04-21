@@ -5,6 +5,14 @@
  * Tool concurrency model (borrowed from Claude Code StreamingToolExecutor):
  * - concurrencySafe tools: read, glob, grep — can run in parallel
  * - non-safe tools: bash, edit, write — run sequentially to avoid conflicts
+ *
+ * Enhanced with Claude Code-style metadata:
+ * - searchHint: keyword hints for ToolSearch
+ * - isConcurrencySafe: whether tool can run in parallel
+ * - isReadOnly: whether tool only reads data
+ * - isDestructive: whether tool irreversibly modifies data
+ * - isSearchOrReadCommand: UI collapse hints
+ * - maxResultSizeChars: result size limit
  */
 
 import { exec } from 'child_process'
@@ -31,6 +39,209 @@ function truncateOutput(output: string): string {
   return output.slice(0, MAX_TOOL_OUTPUT) +
     `\n... [truncated ${output.length - MAX_TOOL_OUTPUT} chars]`
 }
+
+// ============================================================================
+// Enhanced Tool Metadata (Claude Code style)
+// ============================================================================
+
+/**
+ * Tool metadata for enhanced tool selection and UI rendering
+ */
+export interface ToolMetadata {
+  /** Short keyword hint for ToolSearch (3-10 words) */
+  searchHint?: string
+  /** Whether this tool can run concurrently with others */
+  isConcurrencySafe?: (input?: unknown) => boolean
+  /** Whether this tool only reads data, never modifies */
+  isReadOnly?: (input?: unknown) => boolean
+  /** Whether this tool irreversibly modifies data */
+  isDestructive?: (input?: unknown) => boolean
+  /** UI hints for collapsing search/read operations */
+  isSearchOrReadCommand?: (input?: unknown) => {
+    isSearch: boolean
+    isRead: boolean
+    isList?: boolean
+  }
+  /** Max result size before truncation/persistence */
+  maxResultSizeChars?: number
+  /** User-facing name for this specific invocation */
+  userFacingName?: (input?: unknown) => string
+}
+
+/**
+ * Tool definition with full metadata
+ */
+export interface ToolDefinition {
+  name: string
+  description: string
+  input_schema: {
+    type: 'object'
+    properties: Record<string, unknown>
+    required?: string[]
+  }
+  metadata?: ToolMetadata
+}
+
+// Tool metadata registry
+const TOOL_METADATA: Record<string, ToolMetadata> = {
+  bash: {
+    searchHint: 'run shell command npm git',
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    isDestructive: () => false,
+    userFacingName: (input: unknown) => {
+      const cmd = (input as { command?: string })?.command ?? ''
+      const base = cmd.split(' ')[0] ?? 'bash'
+      return base
+    },
+    maxResultSizeChars: 8_000,
+  },
+  read: {
+    searchHint: 'read file contents view',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    isSearchOrReadCommand: () => ({ isSearch: false, isRead: true }),
+    maxResultSizeChars: 8_000,
+  },
+  write: {
+    searchHint: 'create new file write content',
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    isDestructive: () => true,
+    userFacingName: (input: unknown) => {
+      const path = (input as { path?: string })?.path ?? 'file'
+      return path.split('/').pop() ?? path
+    },
+    maxResultSizeChars: 500,
+  },
+  edit: {
+    searchHint: 'modify file edit content',
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    isDestructive: () => false,
+    userFacingName: (input: unknown) => {
+      const path = (input as { path?: string })?.path ?? 'file'
+      return path.split('/').pop() ?? path
+    },
+    maxResultSizeChars: 500,
+  },
+  glob: {
+    searchHint: 'find files by pattern glob',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    isSearchOrReadCommand: () => ({ isSearch: true, isRead: false, isList: true }),
+    maxResultSizeChars: 8_000,
+  },
+  grep: {
+    searchHint: 'search text in files grep',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    isSearchOrReadCommand: () => ({ isSearch: true, isRead: false }),
+    maxResultSizeChars: 8_000,
+  },
+  websearch: {
+    searchHint: 'search web internet find',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    isSearchOrReadCommand: () => ({ isSearch: true, isRead: false }),
+    maxResultSizeChars: 8_000,
+  },
+  webfetch: {
+    searchHint: 'fetch webpage URL content',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    isSearchOrReadCommand: () => ({ isSearch: false, isRead: true }),
+    maxResultSizeChars: 10_000,
+  },
+  task: {
+    searchHint: 'background task async job',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => false,
+    maxResultSizeChars: 500,
+  },
+  task_result: {
+    searchHint: 'get background task result',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    maxResultSizeChars: 8_000,
+  },
+  task_list: {
+    searchHint: 'list all tasks status',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    isSearchOrReadCommand: () => ({ isSearch: false, isRead: false, isList: true }),
+    maxResultSizeChars: 2_000,
+  },
+  notebook: {
+    searchHint: 'jupyter notebook cell',
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    isDestructive: () => false,
+    maxResultSizeChars: 8_000,
+  },
+  skill: {
+    searchHint: 'invoke skill plugin',
+    isConcurrencySafe: () => true,
+    isReadOnly: () => false,
+    maxResultSizeChars: 8_000,
+  },
+}
+
+/**
+ * Get metadata for a tool by name
+ */
+export function getToolMetadata(toolName: string): ToolMetadata | undefined {
+  return TOOL_METADATA[toolName]
+}
+
+/**
+ * Check if a tool is concurrency safe
+ */
+export function isConcurrencySafeTool(toolName: string, input?: unknown): boolean {
+  const meta = TOOL_METADATA[toolName]
+  if (!meta?.isConcurrencySafe) return false
+  return meta.isConcurrencySafe(input)
+}
+
+/**
+ * Check if a tool is read-only
+ */
+export function isReadOnlyTool(toolName: string, input?: unknown): boolean {
+  const meta = TOOL_METADATA[toolName]
+  if (!meta?.isReadOnly) return false
+  return meta.isReadOnly(input)
+}
+
+/**
+ * Check if a tool is destructive
+ */
+export function isDestructiveTool(toolName: string, input?: unknown): boolean {
+  const meta = TOOL_METADATA[toolName]
+  if (!meta?.isDestructive) return false
+  return meta.isDestructive(input)
+}
+
+/**
+ * Get search/read hints for a tool
+ */
+export function getSearchReadHints(toolName: string, input?: unknown): { isSearch: boolean; isRead: boolean; isList?: boolean } | undefined {
+  const meta = TOOL_METADATA[toolName]
+  if (!meta?.isSearchOrReadCommand) return undefined
+  return meta.isSearchOrReadCommand(input)
+}
+
+/**
+ * Get user-facing name for a tool invocation
+ */
+export function getUserFacingName(toolName: string, input?: unknown): string {
+  const meta = TOOL_METADATA[toolName]
+  if (!meta?.userFacingName) return toolName
+  return meta.userFacingName(input)
+}
+
+// ============================================================================
+// Tool Definitions (Enhanced)
+// ============================================================================
 
 // Tools that are safe to run concurrently (read-only operations)
 export const CONCURRENT_SAFE_TOOLS = new Set(['read', 'glob', 'grep', 'websearch', 'webfetch', 'task', 'task_result', 'task_list', 'notebook', 'skill'])

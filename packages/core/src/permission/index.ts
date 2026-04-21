@@ -312,3 +312,20 @@ export { PermissionContext, Rule, Ruleset } from './types.js'
 export { SandboxManager, sandboxManager } from './sandbox.js'
 export { validatePathSafety, validateCommandPaths } from './pathValidation.js'
 export { evaluate } from './evaluate.js'
+
+// Denial tracking
+export {
+  recordDenial,
+  recordAllow,
+  getDenialStatus,
+  processPermissionDecision,
+  getDenialSuggestions,
+  getDenialTrackingState,
+  resetDenialTracking,
+  setDenialThreshold,
+  setDenialWindow,
+  serializeDenialState,
+  deserializeDenialState,
+  type DenialTrackingState,
+  type DenialSuggestion,
+} from './denialTracking.js'
