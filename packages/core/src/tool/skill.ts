@@ -49,6 +49,7 @@ export function createSkillTool(): ToolDef<typeof SkillToolInputSchema, SkillMet
         const result = yield* Effect.either(service.invokeSkill(input.skill, input.args))
 
         if (result._tag === 'Left') {
+          const error = result.left as Error
           return {
             title: `Skill: ${input.skill}`,
             metadata: {
@@ -56,7 +57,7 @@ export function createSkillTool(): ToolDef<typeof SkillToolInputSchema, SkillMet
               success: false,
               durationMs: Date.now() - startTime,
             } as SkillMetadata,
-            output: `Error: ${result.left.message}`,
+            output: `Error: ${error.message}`,
           }
         }
 

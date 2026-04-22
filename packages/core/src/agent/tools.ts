@@ -896,7 +896,8 @@ async function executeSkill(input: { skill: string; args?: string }, signal?: Ab
       Effect.either,
       Effect.map((either) => {
         if (either._tag === 'Left') {
-          return { output: `Skill error: ${either.left.message}`, success: false }
+          const error = either.left as Error
+          return { output: `Skill error: ${error.message}`, success: false }
         }
         const { content } = either.right
         return { output: content, success: true }

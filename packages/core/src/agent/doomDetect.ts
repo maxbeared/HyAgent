@@ -10,6 +10,8 @@
  * more subtle forms of looping behavior.
  */
 
+import type { Message, MessagePart } from '../session/types.js'
+
 export interface DoomDetectResult {
   isDoomLoop: boolean
   fingerprint?: string  // For logging/debugging: "toolName:inputHash"
@@ -18,6 +20,28 @@ export interface DoomDetectResult {
   consecutiveCount?: number
   type?: 'exact' | 'pattern' | 'output' | 'stalled'
   reason?: string
+}
+
+/**
+ * Extract text content from message parts
+ */
+function getTextContent(parts: MessagePart[]): string {
+  const textPart = parts.find((p): p is { type: 'text'; content: string } => p.type === 'text')
+  return textPart?.content ?? ''
+}
+
+/**
+ * Extract tool_use parts from message
+ */
+function getToolUseParts(parts: MessagePart[]): Array<{ type: 'tool_use'; tool: string; input: unknown; callID: string }> {
+  return parts.filter((p): p is { type: 'tool_use'; tool: string; input: unknown; callID: string } => p.type === 'tool_use')
+}
+
+/**
+ * Extract tool_result parts from message
+ */
+function getToolResultParts(parts: MessagePart[]): Array<{ type: 'tool_result'; callID: string; content: string }> {
+  return parts.filter((p): p is { type: 'tool_result'; callID: string; content: string } => p.type === 'tool_result')
 }
 
 /**
@@ -33,7 +57,7 @@ export interface DoomDetectResult {
  * @returns DoomDetectResult with isDoomLoop=true if detected
  */
 export function detectDoomLoop(
-  recentMessages: Array<{ role: string; content: any }>,
+  recentMessages: Message[],
   threshold = 3,
 ): DoomDetectResult {
   if (recentMessages.length < threshold) {
@@ -65,7 +89,7 @@ export function detectDoomLoop(
  * Check 1: Exact loop detection (original OpenCode algorithm)
  */
 function detectExactLoop(
-  recentMessages: Array<{ role: string; content: any }>,
+  recentMessages: Message[],
   threshold: number,
 ): DoomDetectResult {
   const candidates = recentMessages.slice(-threshold)
@@ -74,12 +98,7 @@ function detectExactLoop(
     return { isDoomLoop: false }
   }
 
-  const toolParts = candidates.map(m => {
-    if (Array.isArray(m.content)) {
-      return m.content.filter((b: any) => b.type === 'tool_use')
-    }
-    return []
-  })
+  const toolParts = candidates.map(m => getToolUseParts(m.parts))
 
   if (!toolParts.every(parts => parts.length === 1)) {
     return { isDoomLoop: false }
@@ -87,7 +106,7 @@ function detectExactLoop(
 
   const firstTool = toolParts[0][0]
   const allSameTool = toolParts.every(
-    parts => parts[0].name === firstTool.name,
+    parts => parts[0].tool === firstTool.tool,
   )
   if (!allSameTool) {
     return { isDoomLoop: false }
@@ -101,11 +120,11 @@ function detectExactLoop(
     return { isDoomLoop: false }
   }
 
-  const fingerprint = `${firstTool.name}:${JSON.stringify(firstInput)}`
+  const fingerprint = `${firstTool.tool}:${JSON.stringify(firstInput)}`
   return {
     isDoomLoop: true,
     fingerprint,
-    toolName: firstTool.name,
+    toolName: firstTool.tool,
     input: firstTool.input,
     consecutiveCount: threshold,
     reason: `Exact same tool+input repeated ${threshold} times`,
@@ -117,7 +136,7 @@ function detectExactLoop(
  * but inputs may have slight variations (e.g., different line numbers)
  */
 function detectPatternLoop(
-  recentMessages: Array<{ role: string; content: any }>,
+  recentMessages: Message[],
   threshold: number,
 ): DoomDetectResult {
   const candidates = recentMessages.slice(-threshold)
@@ -126,12 +145,7 @@ function detectPatternLoop(
     return { isDoomLoop: false }
   }
 
-  const toolParts = candidates.map(m => {
-    if (Array.isArray(m.content)) {
-      return m.content.filter((b: any) => b.type === 'tool_use')
-    }
-    return []
-  })
+  const toolParts = candidates.map(m => getToolUseParts(m.parts))
 
   if (!toolParts.every(parts => parts.length === 1)) {
     return { isDoomLoop: false }
@@ -140,22 +154,22 @@ function detectPatternLoop(
   // All must be the same tool
   const firstTool = toolParts[0][0]
   const allSameTool = toolParts.every(
-    parts => parts[0].name === firstTool.name,
+    parts => parts[0].tool === firstTool.tool,
   )
   if (!allSameTool) {
     return { isDoomLoop: false }
   }
 
   // For read/edit tools, inputs are "similar" if they differ only in offset/limit
-  const toolName = firstTool.name
+  const toolName = firstTool.tool
   if (!['read', 'edit'].includes(toolName)) {
     return { isDoomLoop: false }
   }
 
   // Check if inputs are similar (same path, different range params)
-  const firstInput = firstTool.input ?? {}
+  const firstInput = (firstTool.input ?? {}) as Record<string, unknown>
   const allSimilar = toolParts.every(parts => {
-    const input = parts[0].input ?? {}
+    const input = (parts[0].input ?? {}) as Record<string, unknown>
     // Same path/file
     if (input.path !== firstInput.path && input.file !== firstInput.file) {
       return false
@@ -193,7 +207,7 @@ function detectPatternLoop(
  * (indicating no progress despite different attempts)
  */
 function detectOutputLoop(
-  recentMessages: Array<{ role: string; content: any }>,
+  recentMessages: Message[],
   threshold: number,
 ): DoomDetectResult {
   // Look at tool_use blocks AND their corresponding results
@@ -202,14 +216,13 @@ function detectOutputLoop(
 
   const toolResults: string[] = []
   for (const msg of candidates) {
-    if (msg.role === 'user' && Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        if (block.type === 'tool_result') {
-          // Normalize output for comparison
-          const normalized = normalizeOutput(block.content)
-          if (normalized) {
-            toolResults.push(normalized)
-          }
+    if (msg.role === 'user') {
+      const resultParts = getToolResultParts(msg.parts)
+      for (const block of resultParts) {
+        // Normalize output for comparison
+        const normalized = normalizeOutput(block.content)
+        if (normalized) {
+          toolResults.push(normalized)
         }
       }
     }
@@ -235,14 +248,12 @@ function detectOutputLoop(
   let toolName = 'unknown'
   for (let i = recentMessages.length - 1; i >= 0 && toolResults.length > 0; i--) {
     const msg = recentMessages[i]
-    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        if (block.type === 'tool_use') {
-          toolName = block.name
-          break
-        }
+    if (msg.role === 'assistant') {
+      const toolParts = getToolUseParts(msg.parts)
+      if (toolParts.length > 0) {
+        toolName = toolParts[0].tool
+        break
       }
-      if (toolName !== 'unknown') break
     }
   }
 

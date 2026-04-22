@@ -233,16 +233,6 @@ function messageToApiContent(msg: Message): string | Array<any> {
     })
   }
 
-  // Handle content-based messages (for backward compatibility)
-  if (msg.content) {
-    if (typeof msg.content === 'string') {
-      return msg.content
-    }
-    if (Array.isArray(msg.content)) {
-      return msg.content
-    }
-  }
-
   return ''
 }
 
@@ -569,7 +559,12 @@ export async function* runAgentLoopStream(
     // ---- Append full assistant message (text + tool_use) ----
     // IMPORTANT: preserve ALL content blocks (text + tool_use), not just tool_use.
     // Sending only tool_use blocks causes API validation errors.
-    messages.push({ role: 'assistant', content: blocks })
+    messages.push({
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      role: 'assistant',
+      parts: blocks,
+      timestamp: Date.now(),
+    })
 
     // ---- Execute onTurnEnd hooks ----
     const textBlock = blocks.find((b: any) => b.type === 'text')
@@ -644,12 +639,16 @@ export async function* runAgentLoopStream(
     // Build tool_result user message
     const toolResultContent = results.map(r => ({
       type: 'tool_result' as const,
-      tool_use_id: r.id,
+      callID: r.id,
       content: r.result.output,
-      is_error: !r.result.success,
     }))
 
-    messages.push({ role: 'user', content: toolResultContent })
+    messages.push({
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      role: 'user',
+      parts: toolResultContent,
+      timestamp: Date.now(),
+    })
 
     // Yield tool result events
     for (const r of results) {

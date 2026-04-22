@@ -41,7 +41,7 @@ export const ProviderRegistryLayer = Layer.effect(
   Effect.gen(function* () {
     const providers = new Map<string, Provider>()
 
-    return ProviderRegistry.of({
+    return {
       register(provider) {
         return Effect.sync(() => {
           providers.set(provider.id, provider)
@@ -77,7 +77,7 @@ export const ProviderRegistryLayer = Layer.effect(
           return list[0]
         })
       },
-    })
+    }
   })
 )
 
@@ -322,7 +322,7 @@ export const ProviderServiceLayer = Layer.effect(
     yield* registry.register(createOpenAIProvider())
     yield* registry.register(createGoogleProvider())
 
-    return ProviderService.of({
+    return {
       chat(providerID, messages, options) {
         return Effect.gen(function* () {
           const provider = yield* registry.get(providerID)
@@ -347,7 +347,7 @@ export const ProviderServiceLayer = Layer.effect(
           }
         })
       },
-    })
+    }
   })
 )
 

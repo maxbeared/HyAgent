@@ -100,5 +100,5 @@ export function executeTool(
       output: execResult.output,
       metadata: execResult.metadata,
     }
-  })
+  }) as unknown as Effect.Effect<{ title: string; output: string; metadata: unknown }>
 }

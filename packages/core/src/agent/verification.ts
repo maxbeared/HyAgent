@@ -16,7 +16,8 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { readFile } from 'fs/promises'
-import { join, existsSync } from 'path'
+import { join } from 'path'
+import { existsSync } from 'fs'
 
 const execAsync = promisify(exec)
 

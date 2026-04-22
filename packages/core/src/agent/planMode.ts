@@ -290,7 +290,7 @@ export interface PlanTemplate {
   context: string
   implementationSteps: string[]
   verification: string[]
-  risks: Array<{ risk: string; mitigation: string }>
+  risks: string[]
 }
 
 /**

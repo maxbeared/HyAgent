@@ -96,47 +96,47 @@ export interface SessionService {
     model?: string
     provider?: string
     metadata?: Record<string, unknown>
-  }): Effect.Effect<Session>
+  }): Effect.Effect<Session, Error>
 
   /**
    * Get session by ID
    */
-  get(sessionID: string): Effect.Effect<Session | undefined>
+  get(sessionID: string): Effect.Effect<Session | undefined, Error>
 
   /**
    * Add message to session
    */
-  addMessage(sessionID: string, message: Omit<Message, 'id' | 'timestamp'>): Effect.Effect<Message>
+  addMessage(sessionID: string, message: Omit<Message, 'id' | 'timestamp'>): Effect.Effect<Message, Error>
 
   /**
    * Get messages for session
    */
-  getMessages(sessionID: string): Effect.Effect<Message[]>
+  getMessages(sessionID: string): Effect.Effect<Message[], Error>
 
   /**
    * Update session metadata
    */
-  updateMetadata(sessionID: string, metadata: Record<string, unknown>): Effect.Effect<void>
+  updateMetadata(sessionID: string, metadata: Record<string, unknown>): Effect.Effect<void, Error>
 
   /**
    * Delete session
    */
-  delete(sessionID: string): Effect.Effect<void>
+  delete(sessionID: string): Effect.Effect<void, Error>
 
   /**
    * Compact session to reduce token usage
    */
-  compact(sessionID: string, config: CompactionConfig): Effect.Effect<CompactionResult>
+  compact(sessionID: string, config: CompactionConfig): Effect.Effect<CompactionResult, Error>
 
   /**
    * List all sessions
    */
-  list(): Effect.Effect<Session[]>
+  list(): Effect.Effect<Session[], Error>
 
   /**
    * Fork a session from a specific message point
    */
-  fork(sessionID: string, messageID?: string): Effect.Effect<Session>
+  fork(sessionID: string, messageID?: string): Effect.Effect<Session, Error>
 }
 
 /**

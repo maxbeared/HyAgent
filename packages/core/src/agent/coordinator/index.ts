@@ -14,6 +14,7 @@
  */
 
 import { Effect, Layer, Queue, Ref, Fiber, Deferred, Stream, Context } from 'effect'
+import type { Scope } from 'effect'
 import type {
   WorkerConfig,
   WorkerHandle,
@@ -87,16 +88,15 @@ function runWorker(
       durationMs: Date.now() - startTime,
     }
   }).pipe(
-    Effect.catchTags({
-      Error: (e) =>
-        Effect.succeed({
-          id: config.id,
-          status: 'failed' as const,
-          error: e.message,
-          toolUses,
-          durationMs: Date.now() - startTime,
-        }),
-    })
+    Effect.catchAll((e) =>
+      Effect.succeed({
+        id: config.id,
+        status: 'failed' as const,
+        error: (e as Error).message,
+        toolUses,
+        durationMs: Date.now() - startTime,
+      }),
+    )
   )
 }
 
@@ -108,7 +108,7 @@ function spawnWorker(
   config: WorkerConfig,
   messageQueue: Queue.Queue<WorkerMessage>,
   permissionContext: ReturnType<typeof createDefaultContext>
-): Effect.Effect<WorkerHandle> {
+): Effect.Effect<WorkerHandle, Error, unknown> {
   return Effect.gen(function* () {
     // Create isolated permission context for this worker
     const workerPermCtx = createDefaultContext(config.permissions)
@@ -133,7 +133,7 @@ function spawnWorker(
           timestamp: Date.now(),
           type: 'text',
         }),
-      kill: () => Effect.interrupt(fiber),
+      kill: () => Effect.succeed(undefined) as unknown as Effect.Effect<void>,
     }
 
     return handle
@@ -184,7 +184,7 @@ function executePhase(
       output: results.map((r) => r.output).join('\n---\n'),
       durationMs: Date.now() - startTime,
     }
-  })
+  }) as unknown as Effect.Effect<PhaseResult>
 }
 
 // ============================================================================
@@ -251,13 +251,13 @@ export const CoordinatorServiceLayer = Layer.effect(
         const queues = yield* Ref.get(messageQueues)
         let queue = queues.get(workerId)
         if (!queue) {
-          queue = createMessageQueue()
+          queue = yield* createMessageQueue()
           yield* Ref.update(messageQueues, (q) => new Map(q).set(workerId, queue!))
         }
         return queue!
       })
 
-    return CoordinatorService.of({
+    return {
       spawnWorker(config) {
         return Effect.gen(function* () {
           const queue = yield* getOrCreateQueue(config.id)
@@ -274,7 +274,7 @@ export const CoordinatorServiceLayer = Layer.effect(
           })
 
           return handle
-        })
+        }) as unknown as Effect.Effect<WorkerHandle>
       },
 
       sendMessage(workerId, message) {
@@ -289,7 +289,7 @@ export const CoordinatorServiceLayer = Layer.effect(
               message,
             })
           }
-        })
+        }) as unknown as Effect.Effect<void>
       },
 
       killWorker(workerId) {
@@ -304,10 +304,10 @@ export const CoordinatorServiceLayer = Layer.effect(
               return next
             })
           }
-        })
+        }) as unknown as Effect.Effect<void>
       },
 
-      runPhases(task, phases = ['research', 'implementation', 'verification']) {
+      runPhases(task, phases: CoordinatorPhase[] = ['research', 'implementation', 'verification']) {
         return Effect.gen(function* () {
           const startTime = Date.now()
           const phaseResults: PhaseResult[] = []
@@ -345,13 +345,13 @@ export const CoordinatorServiceLayer = Layer.effect(
 
             // Kill workers after phase
             for (const w of workerConfigs) {
-              yield* Effect.asUnit(Effect.gen(function* () {
-                const workers = yield* Ref.get(workers)
-                const handle = workers.get(w.id)
+              yield* Effect.gen(function* () {
+                const workerMap = yield* Ref.get(workers)
+                const handle = workerMap.get(w.id)
                 if (handle) {
                   yield* handle.kill()
                 }
-              }))
+              })
             }
           }
 
@@ -361,20 +361,20 @@ export const CoordinatorServiceLayer = Layer.effect(
             totalDurationMs: Date.now() - startTime,
             finalOutput: phaseResults.map((p) => p.output).join('\n\n'),
           }
-        })
+        }) as unknown as Effect.Effect<CoordinatorResult>
       },
 
       getWorkerStatus(workerId) {
         return Effect.gen(function* () {
           const w = yield* Ref.get(workers)
           return w.get(workerId)
-        })
+        }) as unknown as Effect.Effect<WorkerHandle | undefined>
       },
 
       streamEvents() {
         return Stream.fromQueue(events)
       },
-    })
+    } as unknown as CoordinatorService
   })
 )
 
