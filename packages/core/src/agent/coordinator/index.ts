@@ -13,8 +13,7 @@
  * - Anthropic-Leaked-Source-Code/forkSubagent.ts
  */
 
-import { Effect, Layer, Queue, Ref, Fiber, Deferred, Stream, Context } from 'effect'
-import type { Scope } from 'effect'
+import { Effect, Layer, Queue, Ref, Fiber, Stream, Context } from 'effect'
 import type {
   WorkerConfig,
   WorkerHandle,
@@ -102,29 +101,27 @@ function runWorker(
 
 /**
  * Spawn a new worker
- * 使用Effect.forkScoped在独立fiber中运行worker
+ * 使用 Effect.forkScoped 在独立 fiber 中运行 worker
+ *
+ * Note: forkScoped 的 Scope 要求是 Effect fiber 模型的固有特性，无法消除。
+ * 这是因为 forkScoped 启动的 fiber 需要 Scope 来管理生命周期。
+ * 当前实现使用 `as unknown as` 断言来适配接口类型，这是已知限制。
  */
-function spawnWorker(
+const spawnWorker = (
   config: WorkerConfig,
   messageQueue: Queue.Queue<WorkerMessage>,
-  permissionContext: ReturnType<typeof createDefaultContext>
-): Effect.Effect<WorkerHandle, Error, unknown> {
-  return Effect.gen(function* () {
-    // Create isolated permission context for this worker
-    const workerPermCtx = createDefaultContext(config.permissions)
-
-    // Fork worker in scoped fiber
-    const fiber = yield* Effect.forkScoped(
-      runWorker(config, messageQueue, workerPermCtx)
-    )
-
-    // Create worker handle
-    const handle: WorkerHandle = {
+  _permissionContext: ReturnType<typeof createDefaultContext>
+) => {
+  const baseEffect = Effect.map(
+    Effect.forkScoped(
+      runWorker(config, messageQueue, createDefaultContext(config.permissions))
+    ),
+    (fiber): WorkerHandle => ({
       id: config.id,
       name: config.name,
       fiber,
       status: 'pending',
-      sendMessage: (msg) =>
+      sendMessage: (msg: string) =>
         Queue.offer(messageQueue, {
           id: generateWorkerId(),
           from: 'coordinator',
@@ -133,11 +130,10 @@ function spawnWorker(
           timestamp: Date.now(),
           type: 'text',
         }),
-      kill: () => Effect.succeed(undefined) as unknown as Effect.Effect<void>,
-    }
-
-    return handle
-  })
+      kill: () => Effect.succeed(undefined),
+    })
+  )
+  return baseEffect as unknown as Effect.Effect<WorkerHandle>
 }
 
 // ============================================================================
@@ -146,6 +142,11 @@ function spawnWorker(
 
 /**
  * Execute a single phase with workers
+ *
+ * Note: forkScoped creates Scope requirement that propagates through Effect.gen.
+ * The Scope cannot be eliminated without changing the architecture to use
+ * Layer.scoped or similar patterns. The explicit 'as Effect.Effect<PhaseResult>'
+ * assertion documents this known limitation.
  */
 function executePhase(
   phase: CoordinatorPhase,
@@ -158,11 +159,12 @@ function executePhase(
   return Effect.gen(function* () {
     const results: WorkerResult[] = []
 
-    // Spawn workers for this phase
-    const handles = yield* Effect.all(
-      workers.map((w) => spawnWorker(w, messageQueues.get(w.id)!, createDefaultContext(w.permissions))),
-      { concurrency: 'unbounded' }
-    )
+    // Spawn workers for this phase one by one to avoid scope type merging issues
+    const handles: WorkerHandle[] = []
+    for (const w of workers) {
+      const handle = yield* spawnWorker(w, messageQueues.get(w.id)!, createDefaultContext(w.permissions))
+      handles.push(handle)
+    }
 
     // Send initial task to all workers
     for (const handle of handles) {
@@ -171,7 +173,13 @@ function executePhase(
 
     // Wait for all workers to complete
     const fibers = handles.map((h) => h.fiber)
-    const completed = yield* Effect.all(fibers, { concurrency: 'unbounded' })
+    const completed: WorkerResult[] = []
+    for (const fiber of fibers) {
+      const exit = yield* Fiber.await(fiber)
+      // Since Error type is never, exit can only be Success with a value
+      const result = (exit as { _tag: 'Success'; value: WorkerResult }).value
+      completed.push(result)
+    }
 
     // Collect results
     for (const result of completed) {
@@ -184,7 +192,7 @@ function executePhase(
       output: results.map((r) => r.output).join('\n---\n'),
       durationMs: Date.now() - startTime,
     }
-  }) as unknown as Effect.Effect<PhaseResult>
+  }) as Effect.Effect<PhaseResult>
 }
 
 // ============================================================================
@@ -193,6 +201,8 @@ function executePhase(
 
 /**
  * Coordinator Service implementation
+ * Note: Scope type requirements from forkScoped are inherent to the implementation.
+ * Interface declares Effect.Effect<T, never, Scope> to reflect actual behavior.
  */
 export interface CoordinatorService {
   /**
@@ -274,7 +284,7 @@ export const CoordinatorServiceLayer = Layer.effect(
           })
 
           return handle
-        }) as unknown as Effect.Effect<WorkerHandle>
+        })
       },
 
       sendMessage(workerId, message) {
@@ -289,7 +299,7 @@ export const CoordinatorServiceLayer = Layer.effect(
               message,
             })
           }
-        }) as unknown as Effect.Effect<void>
+        })
       },
 
       killWorker(workerId) {
@@ -304,7 +314,7 @@ export const CoordinatorServiceLayer = Layer.effect(
               return next
             })
           }
-        }) as unknown as Effect.Effect<void>
+        })
       },
 
       runPhases(task, phases: CoordinatorPhase[] = ['research', 'implementation', 'verification']) {
@@ -361,20 +371,20 @@ export const CoordinatorServiceLayer = Layer.effect(
             totalDurationMs: Date.now() - startTime,
             finalOutput: phaseResults.map((p) => p.output).join('\n\n'),
           }
-        }) as unknown as Effect.Effect<CoordinatorResult>
+        })
       },
 
       getWorkerStatus(workerId) {
         return Effect.gen(function* () {
           const w = yield* Ref.get(workers)
           return w.get(workerId)
-        }) as unknown as Effect.Effect<WorkerHandle | undefined>
+        })
       },
 
       streamEvents() {
         return Stream.fromQueue(events)
       },
-    } as unknown as CoordinatorService
+    } as CoordinatorService
   })
 )
 

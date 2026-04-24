@@ -72,7 +72,7 @@ export function executeTool(
   toolId: string,
   input: unknown,
   context: ToolContext
-): Effect.Effect<{ title: string; output: string; metadata: unknown }> {
+): Effect.Effect<{ title: string; output: string; metadata: unknown }, Error, ToolRegistry> {
   return Effect.gen(function* () {
     const registry = yield* ToolRegistryTag
     const tool = yield* registry.get(toolId)
@@ -100,5 +100,5 @@ export function executeTool(
       output: execResult.output,
       metadata: execResult.metadata,
     }
-  }) as unknown as Effect.Effect<{ title: string; output: string; metadata: unknown }>
+  })
 }
