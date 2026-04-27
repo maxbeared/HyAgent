@@ -1,0 +1,28 @@
+[package]
+name = "hybrid-agent-desktop"
+version = "0.1.0"
+description = "Hybrid Agent Desktop Application"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "hybrid_agent_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "z"
+strip = true

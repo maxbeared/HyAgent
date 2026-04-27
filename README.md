@@ -230,7 +230,19 @@ Office 文档、多媒体和二进制文件处理。
 ## 文件结构
 
 ```
-packages/core/src/
+.
+├── packages/
+│   ├── core/               # 核心 Agent 模块
+│   │   └── src/
+│   └── desktop/            # 桌面应用 (Tauri 2.x + Solid.js)
+│       ├── src/            # 前端源码
+│       └── src-tauri/      # Rust 后端
+└── README.md
+```
+
+### Core 模块结构 (`packages/core/src/`)
+
+```
 ├── dev.ts              # 入口，启动 Hono 服务
 ├── config.ts           # 配置加载
 ├── permission.ts       # 安全检查
@@ -289,6 +301,88 @@ packages/core/src/
 ├── worktree/           # Git Worktree 管理
 ├── acp/                # Agent 通信协议
 └── permission/         # 权限分类器
+```
+
+## 桌面应用 (packages/desktop)
+
+跨平台桌面客户端，基于 Tauri 2.x + Solid.js 构建。
+
+### 技术特性
+
+| 指标 | 数值 |
+|------|------|
+| Windows 安装包 | ~5 MB |
+| macOS 安装包 | ~8 MB |
+| 离线支持 | 完全可离线运行 |
+
+### 双模式设计
+
+**简洁模式**：适合日常轻量使用，单一 Agent 对话视图
+**专业模式**：完整面板布局，支持多 Agent 并行调度
+
+### 面板系统
+
+| 面板 | 说明 |
+|------|------|
+| Agent Chat | Agent 对话，支持流式输出、Markdown 渲染 |
+| Console | 实时日志输出 |
+| Explorer | 文件资源管理器 |
+| Editor | 多 Tab 代码编辑器 |
+| Settings | Provider、权限、压缩、语音等配置 |
+| MCP | MCP Server 管理 |
+
+### 交互特性
+
+- **自由面板布局**：拖拽标题栏移动、边缘拖拽调整大小
+- **右键菜单**：在空白区右键快速添加面板
+- **系统托盘**：最小化到托盘，支持 show/hide/quit
+- **语音输入**：支持 Web Speech API（需浏览器支持）
+- **主题切换**：深色/浅色主题
+
+### 构建
+
+```bash
+# 开发模式
+cd packages/desktop
+pnpm tauri dev
+
+# 生产构建
+pnpm tauri build
+
+# 构建产物
+# Windows: src-tauri/target/release/bundle/
+#   ├── Hybrid-Agent_0.0.0_x64-setup.exe  (~3 MB)
+#   ├── Hybrid-Agent_0.0.0_x64.msi        (~3.7 MB)
+#   └── Hybrid-Agent_0.0.0_x64_en-US.msi
+```
+
+### 项目结构
+
+```
+packages/desktop/
+├── src/
+│   ├── lib/
+│   │   ├── components/
+│   │   │   ├── Panel/           # 面板系统
+│   │   │   ├── AgentChat/       # Agent 对话
+│   │   │   ├── Settings/        # 设置面板
+│   │   │   ├── MCP/             # MCP 管理
+│   │   │   └── VoiceInput/      # 语音输入
+│   │   ├── stores/
+│   │   │   ├── layout.ts        # 布局状态
+│   │   │   ├── agent.ts        # Agent 会话
+│   │   │   └── mcp.ts           # MCP 状态
+│   │   └── services/
+│   │       └── agentService.ts  # Agent 服务
+│   ├── App.tsx
+│   └── index.tsx
+├── src-tauri/
+│   ├── src/
+│   │   ├── lib.rs               # Rust 入口
+│   │   └── main.rs              # 主程序
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+└── package.json
 ```
 
 ## 开发

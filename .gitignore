@@ -8,6 +8,13 @@ dist/
 build/
 *.tsbuildinfo
 
+# Tauri
+**/src-tauri/target/
+**/src-tauri/gen/
+**/src-tauri/capabilities/
+**/src-tauri/app-icon.png
+**/src-tauri/icons/
+
 # Environment
 .env
 .env.local
