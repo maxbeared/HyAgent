@@ -311,6 +311,65 @@ pnpm repl
 pnpm build
 ```
 
+## 测试
+
+项目使用 Vitest 进行单元测试，Playwright 进行 E2E 测试。
+
+### 运行测试
+
+```bash
+# 运行所有单元测试
+pnpm --filter @hybrid-agent/core test
+
+# 运行单元测试并查看覆盖率
+pnpm --filter @hybrid-agent/core exec vitest run --coverage
+
+# 运行 E2E 测试
+pnpm --filter @hybrid-agent/core test:e2e
+
+# 类型检查
+pnpm --filter @hybrid-agent/core typecheck
+```
+
+### 测试覆盖率
+
+| 指标 | 百分比 |
+|------|--------|
+| Statements | 86.21% |
+| Branches | 72.24% |
+| Functions | 94.82% |
+| Lines | 86.31% |
+
+### 测试结构
+
+```
+packages/core/
+├── vitest.config.ts          # Vitest 配置
+├── playwright.config.ts       # Playwright 配置
+└── tests/
+    ├── unit/                  # 单元测试
+    │   ├── permission.test.ts    # 权限规则评估、Wildcard 匹配
+    │   ├── classifier.test.ts    # YOLO 分类器、持久化
+    │   ├── doomDetect.test.ts    # Doom 循环检测、进度跟踪
+    │   ├── compaction.test.ts    # 会话压缩、Token 阈值
+    │   └── session.test.ts        # Session 类型、Message 类型
+    └── e2e/                   # E2E 测试
+        └── agent-loop.spec.ts    # Agent 循环测试
+```
+
+### 编写新测试
+
+```typescript
+// tests/unit/example.test.ts
+import { describe, it, expect } from 'vitest'
+
+describe('module name', () => {
+  it('should do something', () => {
+    expect(true).toBe(true)
+  })
+})
+```
+
 ## 配置文件
 
 `config.json`（不提交到 git）：
