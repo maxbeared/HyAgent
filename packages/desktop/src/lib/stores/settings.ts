@@ -1,5 +1,4 @@
 import { createStore } from 'solid-js/store'
-import { createEffect } from 'solid-js'
 
 export type ThemeMode = 'dark' | 'light' | 'system'
 export type Locale = 'zh' | 'en'
@@ -30,6 +29,23 @@ export interface VoiceConfig {
   shortcut: string
   autoSend: boolean
   showWaveform: boolean
+}
+
+export type FontSizeScheme = 'small' | 'medium' | 'large' | 'xlarge'
+export type FontFamilyScheme = 'jetbrains' | 'fira' | 'consolas' | 'monaco'
+
+export const FONT_SIZE_PRESETS: Record<FontSizeScheme, number> = {
+  small: 11,
+  medium: 13,
+  large: 16,
+  xlarge: 19,
+}
+
+export const FONT_FAMILY_PRESETS: Record<FontFamilyScheme, string> = {
+  jetbrains: 'JetBrains Mono',
+  fira: 'Fira Code',
+  consolas: 'Consolas',
+  monaco: 'Monaco',
 }
 
 export interface SettingsState {
@@ -89,7 +105,7 @@ const defaultSettings: SettingsState = {
     showWaveform: true,
   },
   theme: 'system',
-  fontSize: 14,
+  fontSize: 13,
   fontFamily: 'JetBrains Mono',
   language: detectSystemLanguage(),
 }
@@ -131,20 +147,34 @@ function applyTheme() {
   }
 }
 
-// Apply theme on change and setup system theme listener
-if (typeof document !== 'undefined') {
-  createEffect(() => {
-    applyTheme()
-  })
+// Font stack map: maps user-selected font name to full CSS font stack
+const FONT_STACK_VARS: Record<string, string> = {
+  'JetBrains Mono': 'var(--font-stack-jetbrains)',
+  'Fira Code': 'var(--font-stack-fira)',
+  'Consolas': 'var(--font-stack-consolas)',
+  'Monaco': 'var(--font-stack-monaco)',
+}
 
-  // Listen for system theme changes
-  if (window.matchMedia) {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (settings.theme === 'system') {
-        applyTheme()
-      }
-    })
+// Baseline font size — matches --fs-base: calc(13px * var(--font-scale))
+const BASE_FONT_SIZE = 13
+
+// Apply font styles via CSS custom properties
+function applyFontStyles() {
+  if (typeof document !== 'undefined') {
+    const scale = settings.fontSize / BASE_FONT_SIZE
+    document.documentElement.style.setProperty('--font-scale', String(scale))
+    const stack = FONT_STACK_VARS[settings.fontFamily] ?? 'var(--font-stack-jetbrains)'
+    document.documentElement.style.setProperty('--font-mono', stack)
   }
+}
+
+// Listen for system theme changes (applyTheme is also called from updateTheme)
+if (typeof document !== 'undefined' && window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (settings.theme === 'system') {
+      applyTheme()
+    }
+  })
 }
 
 export function useSettings() {
@@ -185,13 +215,15 @@ export function useSettings() {
       saveSettings()
     },
 
-    updateFontSize(size: number) {
-      setSettings('fontSize', size)
+    updateFontSizeScheme(scheme: FontSizeScheme) {
+      setSettings('fontSize', FONT_SIZE_PRESETS[scheme])
+      applyFontStyles()
       saveSettings()
     },
 
-    updateFontFamily(family: string) {
-      setSettings('fontFamily', family)
+    updateFontFamilyScheme(scheme: FontFamilyScheme) {
+      setSettings('fontFamily', FONT_FAMILY_PRESETS[scheme])
+      applyFontStyles()
       saveSettings()
     },
 
@@ -203,6 +235,7 @@ export function useSettings() {
     resetToDefaults() {
       setSettings(defaultSettings)
       applyTheme()
+      applyFontStyles()
       saveSettings()
     },
   }

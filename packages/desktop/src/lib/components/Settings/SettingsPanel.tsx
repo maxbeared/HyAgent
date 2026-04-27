@@ -309,6 +309,20 @@ const ThemeSettings: Component = () => {
   const { t } = useI18n()
   const settings = useSettings()
 
+  const fontSizeOptions = () => [
+    { id: 'small', label: t().fontSmall, value: 11 },
+    { id: 'medium', label: t().fontMedium, value: 13 },
+    { id: 'large', label: t().fontLarge, value: 16 },
+    { id: 'xlarge', label: t().fontXlarge, value: 19 },
+  ]
+
+  const fontFamilyOptions = () => [
+    { id: 'jetbrains', label: 'JetBrains Mono' },
+    { id: 'fira', label: 'Fira Code' },
+    { id: 'consolas', label: 'Consolas' },
+    { id: 'monaco', label: 'Monaco' },
+  ]
+
   return (
     <div class="settings-section">
       <h3>{t().themeConfig}</h3>
@@ -346,29 +360,33 @@ const ThemeSettings: Component = () => {
 
       <div class="form-group">
         <label>{t().fontSize}</label>
-        <div class="input-with-suffix">
-          <input
-            type="number"
-            min="10"
-            max="24"
-            value={settings.settings.fontSize}
-            onInput={(e) => settings.updateFontSize(parseInt(e.currentTarget.value) || 14)}
-          />
-          <span class="suffix">px</span>
+        <div class="theme-options">
+          {fontSizeOptions().map((opt) => (
+            <button
+              class="theme-btn"
+              classList={{ active: settings.settings.fontSize === opt.value }}
+              onClick={() => settings.updateFontSizeScheme(opt.id as any)}
+            >
+              <span>{opt.label}</span>
+              <span class="nav-desc">{opt.value}px</span>
+            </button>
+          ))}
         </div>
       </div>
 
       <div class="form-group">
         <label>{t().fontFamily}</label>
-        <select
-          value={settings.settings.fontFamily}
-          onChange={(e) => settings.updateFontFamily(e.currentTarget.value)}
-        >
-          <option value="JetBrains Mono">JetBrains Mono</option>
-          <option value="Fira Code">Fira Code</option>
-          <option value="Consolas">Consolas</option>
-          <option value="Monaco">Monaco</option>
-        </select>
+        <div class="theme-options">
+          {fontFamilyOptions().map((opt) => (
+            <button
+              class="theme-btn"
+              classList={{ active: settings.settings.fontFamily === opt.label }}
+              onClick={() => settings.updateFontFamilyScheme(opt.id as any)}
+            >
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <button class="btn-secondary" onClick={settings.resetToDefaults}>

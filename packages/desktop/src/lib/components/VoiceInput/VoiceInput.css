@@ -79,7 +79,7 @@
   padding: 8px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  font-size: 13px;
+  font-size: var(--fs-base);
   white-space: nowrap;
   max-width: 300px;
   overflow: hidden;
@@ -103,6 +103,6 @@
   padding: 8px 16px;
   background: var(--accent-danger);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }

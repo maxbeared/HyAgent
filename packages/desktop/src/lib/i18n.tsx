@@ -90,6 +90,10 @@ export interface Translations {
   lightTheme: string
   fontSize: string
   fontFamily: string
+  fontSmall: string
+  fontMedium: string
+  fontLarge: string
+  fontXlarge: string
   resetDefaults: string
   // MCP
   mcpServers: string
@@ -209,6 +213,10 @@ const translations: Record<Locale, Translations> = {
     lightTheme: '浅色',
     fontSize: '字体大小',
     fontFamily: '字体',
+    fontSmall: '小',
+    fontMedium: '中',
+    fontLarge: '大',
+    fontXlarge: '特大',
     resetDefaults: '恢复默认',
     mcpServers: 'MCP 服务器',
     add: '添加',
@@ -320,6 +328,10 @@ const translations: Record<Locale, Translations> = {
     lightTheme: 'Light',
     fontSize: 'Font Size',
     fontFamily: 'Font Family',
+    fontSmall: 'Small',
+    fontMedium: 'Medium',
+    fontLarge: 'Large',
+    fontXlarge: 'X-Large',
     resetDefaults: 'Reset to Defaults',
     mcpServers: 'MCP Servers',
     add: 'Add',

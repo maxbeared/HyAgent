@@ -29,7 +29,7 @@
 }
 
 .settings-header h2 {
-  font-size: 16px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
@@ -86,13 +86,13 @@
 }
 
 .nav-label {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .nav-desc {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -112,14 +112,14 @@
 }
 
 .settings-section h3 {
-  font-size: 16px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 4px 0;
 }
 
 .section-desc {
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-muted);
   margin: 0 0 20px 0;
 }
@@ -130,7 +130,7 @@
 
 .form-group > label {
   display: block;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: 8px;
@@ -145,7 +145,7 @@
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 
 .form-group input:focus,
@@ -171,13 +171,13 @@
 }
 
 .input-with-suffix .suffix {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
 .hint {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: 6px;
 }
@@ -210,7 +210,7 @@
 }
 
 .tool-name {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -221,7 +221,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .tag {
@@ -229,7 +229,7 @@
   padding: 4px 10px;
   background: var(--accent-primary);
   color: #fff;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 
@@ -248,7 +248,7 @@
   background: var(--bg-tertiary);
   border: 2px solid var(--border-color);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
@@ -266,7 +266,7 @@
   background: var(--accent-primary);
   color: #fff;
   border: none;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
 }
@@ -280,7 +280,7 @@
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
