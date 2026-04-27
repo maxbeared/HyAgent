@@ -7,6 +7,7 @@
 import { Effect, Ref } from 'effect'
 import type { Skill } from './types.js'
 import { discoverSkills, generateSkillContent } from './discovery.js'
+import { builtinSkills, builtinToSkill } from './builtin/index.js'
 
 // ============================================================================
 // Service State
@@ -41,8 +42,15 @@ export function createSkillService() {
         const current = yield* Ref.get(state)
         if (current.loaded) return
 
-        const skills = yield* Effect.promise(() => discoverSkills())
-        const skillMap = new Map(skills.map((s) => [s.name, s]))
+        // Load built-in skills first
+        const builtins = builtinSkills.map(builtinToSkill)
+        const skillMap = new Map(builtins.map((s) => [s.name, s]))
+
+        // Then load disk-based skills
+        const diskSkills = yield* Effect.promise(() => discoverSkills())
+        for (const skill of diskSkills) {
+          skillMap.set(skill.name, skill)
+        }
 
         yield* Ref.set(state, { skills: skillMap, loaded: true })
       })
@@ -92,8 +100,7 @@ export function createSkillService() {
       return Effect.gen(function* () {
         const skill = yield* skillEffect
         if (!skill) {
-          // Return a default value - this shouldn't happen but satisfies type checker
-          return { skill: null as any, content: '' }
+          return { skill: null as unknown as Skill, content: '' }
         }
         const content = generateSkillContent(skill, args)
         return { skill, content }

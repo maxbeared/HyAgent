@@ -180,6 +180,53 @@ CLI REPL 工具，通过 SSE 与 agent 实时交互。
 - `self-improvement` — 持续改进
 - `skill-creator` — 创建新技能
 
+**内置 Skills（5个）：**
+- `/verify` — 验证代码更改
+- `/debug` — 调试问题
+- `/review` — 代码审查
+- `/simplify` — 简化复杂代码
+- `/remember` — 记住重要信息
+
+### LSP (`src/lsp/`)
+语言服务器协议支持，连接 40+ 种语言服务器。
+
+**支持的语言/格式：**
+| 类别 | 语言 |
+|------|------|
+| 编程语言 | TypeScript, Python, Rust, Go, Java, C#, C/C++, Swift, Zig, Lua, Dart, Scala, Kotlin, Elixir, Erlang, Clojure, Fortran, Pascal, OCaml, Verilog, VHDL, Haskell, Julia, R, Ruby, PHP |
+| 标记/文档 | HTML, CSS, JSON, Markdown, YAML, XML, LaTeX, GraphQL, TOML |
+| DevOps/配置 | Dockerfile, Terraform, Kubernetes, Properties, Makefile, Ninja |
+| 数据/查询 | SQL |
+| 其他 | Diff/Patch |
+
+**工具函数：**
+- `lspHover()` — 获取悬停信息
+- `lspDefinition()` — 查找定义
+- `lspReferences()` — 查找引用
+- `lspDocumentSymbols()` — 文档符号
+- `lspWorkspaceSymbol()` — 工作区符号搜索
+- `lspDiagnostics()` — 诊断信息
+
+### Document Tools (`src/tool/document.ts`)
+Office 文档、多媒体和二进制文件处理。
+
+**支持的文件类型：**
+| 类别 | 扩展名 |
+|------|--------|
+| Office 文档 | .docx, .xlsx, .pptx, .odt, .ods, .odp |
+| 图片 | .png, .jpg, .gif, .bmp, .webp, .svg, .ico, .tiff, .heic |
+| 音频 | .mp3, .wav, .flac, .ogg, .m4a, .aac, .wma |
+| 视频 | .mp4, .mkv, .avi, .mov, .wmv, .flv, .webm |
+| 存档 | .zip, .tar, .gz, .bz2, .xz, .7z, .rar |
+| 字体 | .ttf, .otf, .woff, .woff2, .eot |
+| 3D/CAD | .stl, .obj, .fbx, .gltf, .glb, .step, .iges, .dwg |
+
+**功能：**
+- `extractText()` — 从 Office 文档提取文本内容
+- `getFileMetadata()` — 获取文件元信息
+- `detectFileFormat()` — 通过魔数检测文件格式
+- `listSupportedTypes()` — 列出支持的文件类型
+
 ## 文件结构
 
 ```
@@ -208,8 +255,17 @@ packages/core/src/
 │   ├── discovery.ts   # Skill 发现
 │   ├── types.ts      # Skill 类型
 │   ├── service.ts    # Skill 服务
-│   └── url.ts        # Skill URL 拉取
+│   ├── url.ts        # Skill URL 拉取
+│   └── builtin/      # 内置 Skills
+│       └── index.ts  # verify, debug, review, simplify, remember
+├── lsp/                 # LSP 支持
+│   ├── index.ts       # LSP 服务 (40+ 语言服务器)
+│   ├── client.ts      # LSP 客户端
+│   ├── spawn.ts       # 服务器进程启动
+│   ├── language.ts    # 语言 ID 映射
+│   └── tool.ts        # LSP 工具函数
 ├── tool/               # 工具实现
+│   ├── document.ts    # Office/多媒体文件处理
 ├── mcp/                # MCP 支持
 │   ├── index.ts       # MCP 入口
 │   ├── auth.ts        # OAuth 认证
@@ -322,7 +378,7 @@ pnpm build
 
 ## 已知问题
 
-### TypeScript 构建错误（26个）
+### TypeScript 构建
 
 部分深层架构问题需要较大范围重构才能彻底解决：
 
