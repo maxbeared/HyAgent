@@ -317,27 +317,29 @@ Office 文档、多媒体和二进制文件处理。
 
 ### 双模式设计
 
-**简洁模式**：适合日常轻量使用，单一 Agent 对话视图
-**专业模式**：完整面板布局，支持多 Agent 并行调度
+**简洁模式**：适合日常轻量使用，单一 Agent 对话视图，Tab 切换面板
+**专业模式**：网格面板布局，支持多面板同时显示，可拖拽调整大小
 
 ### 面板系统
 
 | 面板 | 说明 |
 |------|------|
 | Agent Chat | Agent 对话，支持流式输出、Markdown 渲染 |
-| Console | 实时日志输出 |
-| Explorer | 文件资源管理器 |
-| Editor | 多 Tab 代码编辑器 |
-| Settings | Provider、权限、压缩、语音等配置 |
-| MCP | MCP Server 管理 |
+| File Explorer | 文件资源浏览器，基于 Tauri FS 插件真实访问文件系统 |
+| Terminal | 终端面板，基于 Tauri Shell 插件执行真实命令 |
+| Settings | Provider、权限、压缩、语音、主题、语言等配置 |
 
 ### 交互特性
 
-- **自由面板布局**：拖拽标题栏移动、边缘拖拽调整大小
+- **自定义标题栏**：无系统装饰，自定义窗口控制按钮
+- **窗口控制**：最小化、最大化/还原、关闭按钮
+- **网格布局**（专业模式）：面板可跨行跨列，支持拖拽调整大小
+- **Tab 合并**：同一位置的面板可合并为 Tab
 - **右键菜单**：在空白区右键快速添加面板
 - **系统托盘**：最小化到托盘，支持 show/hide/quit
 - **语音输入**：支持 Web Speech API（需浏览器支持）
-- **主题切换**：深色/浅色主题
+- **主题切换**：跟随系统/深色/浅色主题
+- **语言设置**：中文/English，即时切换
 
 ### 构建
 
@@ -363,25 +365,22 @@ packages/desktop/
 ├── src/
 │   ├── lib/
 │   │   ├── components/
-│   │   │   ├── Panel/           # 面板系统
-│   │   │   ├── AgentChat/       # Agent 对话
+│   │   │   ├── Panel/           # 面板系统 (AgentChat, FileExplorer, Terminal)
 │   │   │   ├── Settings/        # 设置面板
-│   │   │   ├── MCP/             # MCP 管理
-│   │   │   └── VoiceInput/      # 语音输入
+│   │   │   └── Icons.tsx        # SVG 图标组件
 │   │   ├── stores/
-│   │   │   ├── layout.ts        # 布局状态
-│   │   │   ├── agent.ts        # Agent 会话
-│   │   │   └── mcp.ts           # MCP 状态
-│   │   └── services/
-│   │       └── agentService.ts  # Agent 服务
-│   ├── App.tsx
+│   │   │   ├── layout.ts        # 网格布局状态
+│   │   │   ├── settings.ts       # 应用设置
+│   │   │   └── agent.ts        # Agent 会话
+│   │   ├── i18n.tsx             # 国际化
+│   │   └── App.tsx
 │   └── index.tsx
 ├── src-tauri/
 │   ├── src/
-│   │   ├── lib.rs               # Rust 入口
+│   │   ├── lib.rs               # Rust 入口 (Tauri plugins)
 │   │   └── main.rs              # 主程序
-│   ├── Cargo.toml
-│   └── tauri.conf.json
+│   ├── Cargo.toml               # Tauri, shell, fs, dialog plugins
+│   └── tauri.conf.json          # 窗口配置，无装饰模式
 └── package.json
 ```
 

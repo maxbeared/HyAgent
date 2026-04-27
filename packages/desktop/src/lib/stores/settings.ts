@@ -1,5 +1,8 @@
 import { createStore } from 'solid-js/store'
-import { createSignal } from 'solid-js'
+import { createEffect } from 'solid-js'
+
+export type ThemeMode = 'dark' | 'light' | 'system'
+export type Locale = 'zh' | 'en'
 
 export interface ProviderConfig {
   provider: 'anthropic' | 'openai' | 'google' | 'minimaxi'
@@ -34,9 +37,25 @@ export interface SettingsState {
   permission: PermissionConfig
   compaction: CompactionConfig
   voice: VoiceConfig
-  theme: 'dark' | 'light'
+  theme: ThemeMode
   fontSize: number
   fontFamily: string
+  language: Locale
+}
+
+function detectSystemLanguage(): Locale {
+  if (typeof navigator !== 'undefined') {
+    const lang = navigator.language.toLowerCase()
+    if (lang.startsWith('zh')) return 'zh'
+  }
+  return 'en'
+}
+
+function detectSystemTheme(): 'dark' | 'light' {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return 'dark'
 }
 
 const defaultSettings: SettingsState = {
@@ -69,14 +88,11 @@ const defaultSettings: SettingsState = {
     autoSend: true,
     showWaveform: true,
   },
-  theme: 'dark',
+  theme: 'system',
   fontSize: 14,
   fontFamily: 'JetBrains Mono',
+  language: detectSystemLanguage(),
 }
-
-const [settings, setSettings] = createStore<SettingsState>(
-  loadSettings() || defaultSettings
-)
 
 function loadSettings(): SettingsState | null {
   try {
@@ -88,6 +104,42 @@ function loadSettings(): SettingsState | null {
     console.error('Failed to load settings:', e)
   }
   return null
+}
+
+const [settings, setSettings] = createStore<SettingsState>(
+  loadSettings() || defaultSettings
+)
+
+// Get effective theme (resolving 'system' to actual theme)
+export function getEffectiveTheme(): 'dark' | 'light' {
+  if (settings.theme === 'system') {
+    return detectSystemTheme()
+  }
+  return settings.theme
+}
+
+// Apply theme to document
+function applyTheme() {
+  if (typeof document !== 'undefined') {
+    const effectiveTheme = getEffectiveTheme()
+    document.documentElement.setAttribute('data-theme', effectiveTheme)
+  }
+}
+
+// Apply theme on change and setup system theme listener
+if (typeof document !== 'undefined') {
+  createEffect(() => {
+    applyTheme()
+  })
+
+  // Listen for system theme changes
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (settings.theme === 'system') {
+        applyTheme()
+      }
+    })
+  }
 }
 
 export function useSettings() {
@@ -122,8 +174,9 @@ export function useSettings() {
       saveSettings()
     },
 
-    updateTheme(theme: 'dark' | 'light') {
+    updateTheme(theme: ThemeMode) {
       setSettings('theme', theme)
+      applyTheme()
       saveSettings()
     },
 
@@ -137,8 +190,14 @@ export function useSettings() {
       saveSettings()
     },
 
+    updateLanguage(language: Locale) {
+      setSettings('language', language)
+      saveSettings()
+    },
+
     resetToDefaults() {
       setSettings(defaultSettings)
+      applyTheme()
       saveSettings()
     },
   }

@@ -24,15 +24,15 @@ describe('PanelSystem Component', () => {
       expect(content).toContain('panel-system')
       expect(content).toContain('title-bar')
       expect(content).toContain('panel-container')
-      expect(content).toContain('panel-grid')
+      expect(content).toContain('tab-bar')
       expect(content).toContain('status-bar')
     })
 
     it('should have mode switch buttons', () => {
       const content = fs.readFileSync(componentPath, 'utf-8')
 
-      expect(content).toContain('简洁模式')
-      expect(content).toContain('专业模式')
+      expect(content).toContain('simpleMode')
+      expect(content).toContain('proMode')
     })
   })
 
@@ -46,9 +46,10 @@ describe('PanelSystem Component', () => {
     it('should have expected CSS classes', () => {
       const content = fs.readFileSync(cssPath, 'utf-8')
 
-      expect(content).toContain('.panel')
-      expect(content).toContain('.panel-header')
-      expect(content).toContain('.panel-content')
+      expect(content).toContain('.panel-system')
+      expect(content).toContain('.title-bar')
+      expect(content).toContain('.tab-bar')
+      expect(content).toContain('.tab')
     })
   })
 })

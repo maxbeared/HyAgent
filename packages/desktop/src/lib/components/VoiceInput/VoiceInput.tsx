@@ -1,4 +1,6 @@
-import { Component, createSignal, Show, onCleanup } from 'solid-js'
+import { Component, createSignal, Show, onCleanup, onMount } from 'solid-js'
+import { useI18n } from '../../i18n'
+import { MicIcon } from '../Icons'
 import './VoiceInput.css'
 
 export interface VoiceInputProps {
@@ -10,6 +12,7 @@ export interface VoiceInputProps {
 type RecognitionState = 'idle' | 'listening' | 'processing'
 
 export const VoiceInput: Component<VoiceInputProps> = (props) => {
+  const { t } = useI18n()
   const [state, setState] = createSignal<RecognitionState>('idle')
   const [transcript, setTranscript] = createSignal('')
   const [error, setError] = createSignal<string | null>(null)
@@ -65,11 +68,11 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error)
       if (event.error === 'not-allowed') {
-        setError('Microphone access denied')
+        setError(t.microphoneDenied)
       } else if (event.error === 'no-speech') {
-        setError('No speech detected')
+        setError(t.noSpeechDetected)
       } else {
-        setError(`Error: ${event.error}`)
+        setError(`${t.error}: ${event.error}`)
       }
       setState('idle')
     }
@@ -91,7 +94,7 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
     }
 
     if (!recognition) {
-      setError('Speech recognition not supported')
+      setError(t.speechNotSupported)
       return
     }
 
@@ -120,7 +123,9 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
     }
   }
 
-  document.addEventListener('keydown', handleKeyDown)
+  onMount(() => {
+    document.addEventListener('keydown', handleKeyDown)
+  })
 
   onCleanup(() => {
     document.removeEventListener('keydown', handleKeyDown)
@@ -139,7 +144,7 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
           disabled: props.disabled || !isSupported(),
         }}
         onClick={() => (state() === 'idle' ? startListening() : stopListening())}
-        title={`Voice input (Ctrl+Shift+V)`}
+        title={`${t.voiceInput} (Ctrl+Shift+V)`}
         disabled={props.disabled || !isSupported()}
       >
         <Show when={state() === 'listening'}>
@@ -152,17 +157,17 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
           </div>
         </Show>
         <Show when={state() !== 'listening'}>
-          <span class="mic-icon">🎤</span>
+          <MicIcon size={16} />
         </Show>
       </button>
 
       <Show when={state() !== 'idle' || transcript()}>
         <div class="transcript-preview">
           <Show when={state() === 'listening'}>
-            <span class="listening-text">{transcript() || 'Listening...'}</span>
+            <span class="listening-text">{transcript() || t.listening}</span>
           </Show>
           <Show when={state() === 'processing'}>
-            <span class="processing-text">Processing...</span>
+            <span class="processing-text">{t.processing}</span>
           </Show>
         </div>
       </Show>

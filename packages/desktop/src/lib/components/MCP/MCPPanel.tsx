@@ -1,9 +1,12 @@
 import { Component, For, Show, createSignal } from 'solid-js'
 import { useMCP } from '../../stores/mcp'
+import { useI18n } from '../../i18n'
+import { PlugIcon, EditIcon, TrashIcon, PlusIcon, CloseIcon } from '../Icons'
 import type { MCPServer, MCPConnectionStatus } from '@hybrid-agent/core'
 import './MCPPanel.css'
 
 export const MCPPanel: Component = () => {
+  const { t } = useI18n()
   const mcp = useMCP()
   const [showAddDialog, setShowAddDialog] = createSignal(false)
 
@@ -29,13 +32,13 @@ export const MCPPanel: Component = () => {
   const getStatusText = (status: MCPConnectionStatus): string => {
     switch (status) {
       case 'connected':
-        return 'Connected'
+        return t.connected
       case 'connecting':
-        return 'Connecting...'
+        return t.connecting
       case 'disconnected':
-        return 'Disconnected'
+        return t.disconnected
       case 'error':
-        return 'Error'
+        return t.error
       default:
         return 'Unknown'
     }
@@ -44,17 +47,23 @@ export const MCPPanel: Component = () => {
   return (
     <div class="mcp-panel">
       <div class="mcp-header">
-        <span>MCP Servers</span>
-        <button class="add-btn" onClick={handleAddServer}>+</button>
+        <span>{t.mcpServers}</span>
+        <button class="add-btn" onClick={handleAddServer} title={t.add}>
+          <PlusIcon size={14} />
+        </button>
       </div>
 
       <div class="mcp-content">
         <Show when={mcp.state().servers.size === 0}>
           <div class="empty-state">
-            <div class="empty-icon">🔌</div>
-            <div class="empty-title">No MCP Servers</div>
-            <div class="empty-desc">Add a server to extend agent capabilities</div>
-            <button class="add-first-btn" onClick={handleAddServer}>Add Server</button>
+            <div class="empty-icon">
+              <PlugIcon size={36} />
+            </div>
+            <div class="empty-title">{t.noMCPServers}</div>
+            <div class="empty-desc">{t.addServerToExtend}</div>
+            <button class="add-first-btn" onClick={handleAddServer}>
+              {t.addServer}
+            </button>
           </div>
         </Show>
 
@@ -72,8 +81,12 @@ export const MCPPanel: Component = () => {
                 {getStatusText(mcp.getConnectionStatus(server.name))}
               </div>
               <div class="server-actions">
-                <button class="action-btn" title="Edit">✏️</button>
-                <button class="action-btn" title="Delete">🗑️</button>
+                <button class="action-btn" title={t.edit}>
+                  <EditIcon size={14} />
+                </button>
+                <button class="action-btn" title={t.delete}>
+                  <TrashIcon size={14} />
+                </button>
               </div>
             </div>
           )}
@@ -84,33 +97,37 @@ export const MCPPanel: Component = () => {
         <div class="dialog-overlay" onClick={() => setShowAddDialog(false)}>
           <div class="dialog" onClick={(e) => e.stopPropagation()}>
             <div class="dialog-header">
-              <h3>Add MCP Server</h3>
-              <button onClick={() => setShowAddDialog(false)}>×</button>
+              <h3>{t.addMCPServer}</h3>
+              <button onClick={() => setShowAddDialog(false)}>
+                <CloseIcon size={16} />
+              </button>
             </div>
             <div class="dialog-body">
               <div class="form-group">
-                <label>Server Name</label>
+                <label>{t.serverName}</label>
                 <input type="text" placeholder="my-mcp-server" />
               </div>
               <div class="form-group">
-                <label>Transport Type</label>
+                <label>{t.transportType}</label>
                 <select>
-                  <option value="stdio">Stdio</option>
-                  <option value="http">HTTP/SSE</option>
+                  <option value="stdio">{t.stdio}</option>
+                  <option value="http">{t.httpSSE}</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>Command (for stdio)</label>
+                <label>{t.commandStdio}</label>
                 <input type="text" placeholder="npx @modelcontextprotocol/server-filesystem" />
               </div>
               <div class="form-group">
-                <label>URL (for http/sse)</label>
+                <label>{t.urlHttp}</label>
                 <input type="text" placeholder="http://localhost:3001/mcp" />
               </div>
             </div>
             <div class="dialog-footer">
-              <button class="btn-cancel" onClick={() => setShowAddDialog(false)}>Cancel</button>
-              <button class="btn-add">Add Server</button>
+              <button class="btn-cancel" onClick={() => setShowAddDialog(false)}>
+                {t.cancel}
+              </button>
+              <button class="btn-add">{t.addServer}</button>
             </div>
           </div>
         </div>

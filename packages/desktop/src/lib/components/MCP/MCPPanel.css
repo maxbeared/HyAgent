@@ -24,9 +24,7 @@
   justify-content: center;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 4px;
   color: var(--text-secondary);
-  font-size: 14px;
   cursor: pointer;
 }
 
@@ -51,9 +49,8 @@
 }
 
 .empty-icon {
-  font-size: 36px;
   margin-bottom: 12px;
-  opacity: 0.5;
+  color: var(--text-muted);
 }
 
 .empty-title {
@@ -74,7 +71,6 @@
   background: var(--accent-primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
 }
@@ -85,7 +81,6 @@
   padding: 10px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
   margin-bottom: 8px;
 }
 
@@ -127,14 +122,12 @@
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 12px;
-  opacity: 0.6;
 }
 
 .action-btn:hover {
-  opacity: 1;
+  color: var(--text-primary);
   background: var(--bg-tertiary);
 }
 
@@ -152,8 +145,6 @@
   width: 400px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  overflow: hidden;
 }
 
 .dialog-header {
@@ -178,10 +169,12 @@
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  font-size: 18px;
   color: var(--text-muted);
   cursor: pointer;
+}
+
+.dialog-header button:hover {
+  color: var(--text-primary);
 }
 
 .dialog-body {
@@ -206,7 +199,6 @@
   padding: 10px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
   color: var(--text-primary);
   font-size: 13px;
 }
@@ -229,18 +221,24 @@
   padding: 8px 16px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
+}
+
+.btn-cancel:hover {
+  background: var(--bg-tertiary);
 }
 
 .btn-add {
   padding: 8px 16px;
   background: var(--accent-primary);
   border: none;
-  border-radius: 6px;
   color: #fff;
   font-size: 13px;
   cursor: pointer;
+}
+
+.btn-add:hover {
+  opacity: 0.9;
 }

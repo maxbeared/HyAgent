@@ -1,14 +1,17 @@
-import { Component, For, Show, createSignal, onCleanup } from 'solid-js'
+import { Component, For, Show, createSignal } from 'solid-js'
 import { useAgent, type Message } from '../../stores/agent'
 import { agentService } from '../../services/agentService'
 import { useSettings } from '../../stores/settings'
-import './AgentChatPanel.css'
+import { useI18n } from '../../i18n'
+import { SendIcon, ChatIcon } from '../Icons'
+import './PanelSystem.css'
 
 interface AgentChatPanelProps {
   panelId: string
 }
 
 export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
+  const { t } = useI18n()
   const agent = useAgent()
   const settings = useSettings()
   const [messages, setMessages] = createSignal<Message[]>([])
@@ -30,7 +33,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
 
     const config = settings.settings.provider
     if (!config.apiKey) {
-      setError('Please configure API key in Settings')
+      setError(t.configureApiKey)
       return
     }
 
@@ -40,7 +43,6 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
       model: config.model,
     })
 
-    // Add user message
     const userMessage: Message = {
       id: `msg_${Date.now()}_user`,
       role: 'user',
@@ -52,7 +54,6 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
     setError(null)
     setIsStreaming(true)
 
-    // Create a session for this conversation
     const sessionId = agent.createSession()
 
     try {
@@ -61,7 +62,6 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
       for await (const event of agentService.streamChat(sessionId, [], text)) {
         if (event.type === 'text') {
           fullResponse += event.content || ''
-          // Update or create agent message
           setMessages(m => {
             const last = m[m.length - 1]
             if (last?.role === 'user') {
@@ -81,7 +81,6 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
           })
           scrollToBottom()
         } else if (event.type === 'tool_start') {
-          // Add tool call indicator
           setMessages(m => [...m, {
             id: `msg_${Date.now()}_tool`,
             role: 'agent',
@@ -95,7 +94,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
             }],
           }])
         } else if (event.type === 'error') {
-          setError(event.error || 'Unknown error')
+          setError(event.error || t.unknownError)
         }
       }
     } catch (e) {
@@ -110,9 +109,11 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
       <div class="chat-messages">
         <Show when={messages().length === 0}>
           <div class="empty-state">
-            <div class="empty-icon">💬</div>
-            <div class="empty-title">Start a conversation</div>
-            <div class="empty-desc">Type a message to begin chatting with the agent</div>
+            <div class="empty-icon">
+              <ChatIcon size={48} />
+            </div>
+            <div class="empty-title">{t.startConversation}</div>
+            <div class="empty-desc">{t.typeToBegin}</div>
           </div>
         </Show>
 
@@ -120,8 +121,12 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
           {(msg) => (
             <div class={`message ${msg.role}`}>
               <div class="message-header">
-                <span class="message-role">{msg.role === 'user' ? 'You' : 'Agent'}</span>
-                <span class="message-time">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                <span class="message-role">
+                  {msg.role === 'user' ? t.you : t.agent}
+                </span>
+                <span class="message-time">
+                  {new Date(msg.timestamp).toLocaleTimeString()}
+                </span>
               </div>
               <div class="message-content">
                 <pre>{msg.content}</pre>
@@ -157,7 +162,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
       <div class="chat-input">
         <input
           type="text"
-          placeholder={isStreaming() ? 'Agent is thinking...' : 'Type a message...'}
+          placeholder={isStreaming() ? t.agentThinking : t.typeMessage}
           value={input()}
           onInput={(e) => setInput(e.currentTarget.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
@@ -168,7 +173,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
           onClick={handleSend}
           disabled={isStreaming() || !input().trim()}
         >
-          {isStreaming() ? '...' : '➤'}
+          <SendIcon size={18} />
         </button>
       </div>
     </div>

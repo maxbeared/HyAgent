@@ -2,11 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useLayout, getDefaultLayout, type PanelType, type PanelConfig } from '../../src/lib/stores/layout'
 
 describe('Layout Store', () => {
-  // The store is a singleton with module-level state
   const layout = useLayout()
 
   beforeEach(() => {
-    // Reset to simple mode before each test to avoid state pollution
     layout.setMode('simple')
   })
 
@@ -18,7 +16,7 @@ describe('Layout Store', () => {
 
     it('should have default simple panels', () => {
       layout.setMode('simple')
-      expect(layout.layout.panels).toHaveLength(3)
+      expect(layout.layout.panels).toHaveLength(1)
       expect(layout.layout.panels.every((p) => p.type === 'agent')).toBe(true)
     })
 
@@ -32,7 +30,7 @@ describe('Layout Store', () => {
     it('should switch to pro mode', () => {
       layout.setMode('pro')
       expect(layout.layout.mode).toBe('pro')
-      expect(layout.layout.panels.length).toBeGreaterThan(3)
+      expect(layout.layout.panels.length).toBeGreaterThan(1)
     })
 
     it('should switch back to simple mode', () => {
@@ -40,7 +38,7 @@ describe('Layout Store', () => {
       layout.setMode('simple')
 
       expect(layout.layout.mode).toBe('simple')
-      expect(layout.layout.panels).toHaveLength(3)
+      expect(layout.layout.panels).toHaveLength(1)
     })
 
     it('should reset panels when switching modes', () => {
@@ -54,16 +52,18 @@ describe('Layout Store', () => {
   })
 
   describe('addPanel', () => {
-    it('should add a new panel', () => {
+    it('should add a new panel in pro mode', () => {
+      layout.setMode('pro')
       const initialCount = layout.layout.panels.length
 
-      const newId = layout.addPanel('console')
+      const newId = layout.addPanel('terminal')
 
       expect(layout.layout.panels.length).toBe(initialCount + 1)
       expect(newId).toBeTruthy()
     })
 
     it('should add panel with correct type', () => {
+      layout.setMode('pro')
       layout.addPanel('explorer')
 
       const addedPanel = layout.layout.panels.find((p) => p.type === 'explorer')
@@ -72,37 +72,42 @@ describe('Layout Store', () => {
     })
 
     it('should generate valid panel ids', () => {
-      const id1 = layout.addPanel('editor')
+      layout.setMode('pro')
+      const id1 = layout.addPanel('terminal')
 
-      // IDs are timestamp-based and may collide if created in same millisecond
-      expect(id1).toMatch(/^editor-\d+$/)
+      expect(id1).toMatch(/^terminal-\d+$/)
     })
 
     it('should add panel with default title', () => {
-      layout.addPanel('editor')
+      layout.setMode('pro')
+      layout.addPanel('terminal')
 
-      const addedPanel = layout.layout.panels.find((p) => p.type === 'editor')
-      expect(addedPanel?.title).toContain('Editor')
+      const addedPanel = layout.layout.panels.find((p) => p.type === 'terminal')
+      expect(addedPanel?.title).toContain('Terminal')
     })
 
-    it('should add panel as not minimized by default', () => {
-      layout.addPanel('console')
+    it('should set new panel as active', () => {
+      layout.setMode('pro')
+      const newId = layout.addPanel('terminal')
 
-      const addedPanel = layout.layout.panels.find((p) => p.type === 'console')
-      expect(addedPanel?.minimized).toBe(false)
+      expect(layout.layout.activePanelId).toBe(newId)
     })
 
-    it('should add panel as not floating by default', () => {
-      layout.addPanel('preview')
+    it('should replace panel in simple mode', () => {
+      // In simple mode, addPanel replaces the single panel
+      const initialId = layout.layout.panels[0].id
 
-      const addedPanel = layout.layout.panels.find((p) => p.type === 'preview')
-      expect(addedPanel?.floating).toBe(false)
+      const newId = layout.addPanel('terminal')
+
+      expect(layout.layout.panels.length).toBe(1)
+      expect(newId).not.toBe(initialId)
     })
   })
 
   describe('removePanel', () => {
-    it('should remove panel by id', () => {
-      const panelId = layout.layout.panels[0].id
+    it('should remove panel by id in pro mode', () => {
+      layout.setMode('pro')
+      const panelId = layout.layout.panels[1]?.id || layout.layout.panels[0].id
       const initialCount = layout.layout.panels.length
 
       layout.removePanel(panelId)
@@ -111,69 +116,14 @@ describe('Layout Store', () => {
       expect(layout.layout.panels.find((p) => p.id === panelId)).toBeUndefined()
     })
 
-    it('should not error when removing non-existent panel', () => {
+    it('should not remove last panel', () => {
+      layout.setMode('simple')
+      const panelId = layout.layout.panels[0].id
       const initialCount = layout.layout.panels.length
 
-      layout.removePanel('non-existent-id')
+      layout.removePanel(panelId)
 
-      expect(layout.layout.panels.length).toBe(initialCount)
-    })
-  })
-
-  describe('toggleMinimize', () => {
-    it('should toggle panel minimize state', () => {
-      const panelId = layout.layout.panels[0].id
-      const initialState = layout.layout.panels[0].minimized
-
-      layout.toggleMinimize(panelId)
-
-      const panel = layout.layout.panels.find((p) => p.id === panelId)
-      expect(panel?.minimized).toBe(!initialState)
-    })
-
-    it('should toggle back to original state', () => {
-      const panelId = layout.layout.panels[0].id
-      const originalState = layout.layout.panels[0].minimized
-
-      layout.toggleMinimize(panelId)
-      layout.toggleMinimize(panelId)
-
-      const panel = layout.layout.panels.find((p) => p.id === panelId)
-      expect(panel?.minimized).toBe(originalState)
-    })
-  })
-
-  describe('toggleFloat', () => {
-    it('should toggle panel float state', () => {
-      const panelId = layout.layout.panels[0].id
-      const initialState = layout.layout.panels[0].floating
-
-      layout.toggleFloat(panelId)
-
-      const panel = layout.layout.panels.find((p) => p.id === panelId)
-      expect(panel?.floating).toBe(!initialState)
-    })
-  })
-
-  describe('updatePanelBounds', () => {
-    it('should update panel bounds', () => {
-      const panelId = layout.layout.panels[0].id
-      const bounds = { x: 100, y: 200, width: 400, height: 300 }
-
-      layout.updatePanelBounds(panelId, bounds)
-
-      const panel = layout.layout.panels.find((p) => p.id === panelId)
-      expect(panel?.bounds).toEqual(bounds)
-    })
-
-    it('should update only provided bounds properties', () => {
-      const panelId = layout.layout.panels[0].id
-
-      layout.updatePanelBounds(panelId, { x: 100, y: 200 })
-
-      const panel = layout.layout.panels.find((p) => p.id === panelId)
-      expect(panel?.bounds?.x).toBe(100)
-      expect(panel?.bounds?.y).toBe(200)
+      expect(layout.layout.panels.length).toBe(initialCount) // Should still have 1
     })
   })
 
@@ -196,60 +146,22 @@ describe('Layout Store', () => {
     })
   })
 
-  describe('dragging state', () => {
-    it('should track dragging panel id', () => {
-      const panelId = layout.layout.panels[0].id
-
-      layout.startDragging(panelId)
-
-      expect(layout.draggingPanel()).toBe(panelId)
-    })
-
-    it('should clear dragging state', () => {
-      const panelId = layout.layout.panels[0].id
-
-      layout.startDragging(panelId)
-      layout.stopDragging()
-
-      expect(layout.draggingPanel()).toBeNull()
-    })
-  })
-
-  describe('resizing state', () => {
-    it('should track resizing panel id', () => {
-      const panelId = layout.layout.panels[0].id
-
-      layout.startResizing(panelId)
-
-      expect(layout.resizingPanel()).toBe(panelId)
-    })
-
-    it('should clear resizing state', () => {
-      const panelId = layout.layout.panels[0].id
-
-      layout.startResizing(panelId)
-      layout.stopResizing()
-
-      expect(layout.resizingPanel()).toBeNull()
-    })
-  })
-
   describe('getDefaultLayout', () => {
     it('should return simple mode panels', () => {
       const panels = getDefaultLayout('simple')
 
-      expect(panels).toHaveLength(3)
+      expect(panels).toHaveLength(1)
       expect(panels.every((p) => p.type === 'agent')).toBe(true)
     })
 
     it('should return pro mode panels', () => {
       const panels = getDefaultLayout('pro')
 
-      expect(panels.length).toBeGreaterThan(3)
+      expect(panels.length).toBeGreaterThan(1)
       const types = panels.map((p) => p.type)
       expect(types).toContain('explorer')
-      expect(types).toContain('console')
-      expect(types).toContain('editor')
+      expect(types).toContain('agent')
+      expect(types).toContain('terminal')
     })
 
     it('should return a new array instance each time', () => {
@@ -263,15 +175,15 @@ describe('Layout Store', () => {
 
 describe('PanelType', () => {
   it('should define valid panel types', () => {
-    const validTypes: PanelType[] = ['agent', 'console', 'explorer', 'editor', 'preview', 'settings']
+    const validTypes: PanelType[] = ['agent', 'explorer', 'terminal']
 
     validTypes.forEach((type) => {
       const panel: PanelConfig = {
         id: `panel-${type}`,
         type,
         title: `${type} panel`,
-        minimized: false,
-        floating: false,
+        position: { row: 0, col: 0, rowSpan: 1, colSpan: 1 },
+        tabs: [`panel-${type}`],
       }
       expect(panel.type).toBe(type)
     })

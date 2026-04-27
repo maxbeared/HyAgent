@@ -61,7 +61,7 @@ describe('Settings Store', () => {
     it('should have default theme and appearance settings', () => {
       const { settings } = settingsStore
 
-      expect(settings.theme).toBe('dark')
+      expect(settings.theme).toBe('system')
       expect(settings.fontSize).toBe(14)
       expect(settings.fontFamily).toBe('JetBrains Mono')
     })

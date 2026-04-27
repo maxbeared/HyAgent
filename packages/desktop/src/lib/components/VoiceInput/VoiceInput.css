@@ -15,42 +15,29 @@
   border: 1px solid var(--border-color);
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s;
-  font-size: 16px;
+  color: var(--text-secondary);
 }
 
 .voice-btn:hover:not(.disabled) {
-  background: var(--bg-secondary);
   border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .voice-btn.listening {
   background: var(--accent-danger);
   border-color: var(--accent-danger);
-  animation: pulse 1.5s infinite;
+  color: #fff;
 }
 
 .voice-btn.processing {
   background: var(--accent-warning);
   border-color: var(--accent-warning);
+  color: #fff;
 }
 
 .voice-btn.disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(248, 81, 73, 0);
-  }
-}
-
-.mic-icon {
-  font-size: 14px;
 }
 
 .wave-animation {
@@ -65,7 +52,6 @@
   width: 3px;
   height: 100%;
   background: #fff;
-  border-radius: 2px;
   animation: wave 0.8s ease-in-out infinite;
 }
 
@@ -93,13 +79,11 @@
   padding: 8px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
   font-size: 13px;
   white-space: nowrap;
   max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .listening-text {
@@ -119,7 +103,6 @@
   padding: 8px 16px;
   background: var(--accent-danger);
   color: #fff;
-  border-radius: 6px;
   font-size: 12px;
   white-space: nowrap;
 }
