@@ -451,6 +451,45 @@ packages/core/
         └── agent-loop.spec.ts    # Agent 循环测试
 ```
 
+### 桌面应用测试
+
+桌面应用使用 Vitest + jsdom 进行前端测试，Cargo 进行 Rust 后端测试。
+
+```bash
+# 前端测试
+cd packages/desktop
+pnpm test              # 运行所有测试
+pnpm test:watch        # 监听模式
+pnpm test:coverage     # 覆盖率报告
+pnpm test:unit         # 纯单元测试
+pnpm test:component     # 组件测试
+
+# Rust 后端测试
+cd packages/desktop/src-tauri
+cargo test
+```
+
+### 桌面测试结构
+
+```
+packages/desktop/
+├── vitest.config.ts           # Vitest 配置 (jsdom + solid)
+├── tests/
+│   ├── setup/
+│   │   └── global.ts          # 测试全局设置 (localStorage mock)
+│   ├── unit/                  # 单元测试
+│   │   ├── agent.test.ts      # Agent Store 测试
+│   │   ├── settings.test.ts   # Settings Store 测试
+│   │   ├── layout.test.ts     # Layout Store 测试
+│   │   ├── mcp.test.ts        # MCP Store 测试
+│   │   └── agentService.test.ts  # AgentService 测试
+│   └── component/             # 组件测试
+│       └── PanelSystem.test.tsx  # 面板系统测试
+└── src-tauri/
+    └── src/
+        └── lib.rs             # Rust 测试 (cargo test)
+```
+
 ### 编写新测试
 
 ```typescript
