@@ -98,7 +98,12 @@ function loadSettings(): SettingsState | null {
   try {
     const saved = localStorage.getItem('hybrid-agent-settings')
     if (saved) {
-      return JSON.parse(saved)
+      const parsed = JSON.parse(saved)
+      // If no language is saved (old settings), use system language
+      if (!parsed.language) {
+        parsed.language = detectSystemLanguage()
+      }
+      return parsed
     }
   } catch (e) {
     console.error('Failed to load settings:', e)

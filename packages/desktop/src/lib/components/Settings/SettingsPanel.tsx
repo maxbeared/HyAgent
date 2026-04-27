@@ -13,20 +13,21 @@ export const SettingsPanel: Component<SettingsPanelProps> = (props) => {
   const settings = useSettings()
   const [activeTab, setActiveTab] = createSignal('provider')
 
-  const tabs = [
-    { id: 'provider', label: t.provider, description: t.providerDesc },
-    { id: 'permission', label: t.permission, description: t.permissionDesc },
-    { id: 'compaction', label: t.compaction, description: t.compactionDesc },
-    { id: 'voice', label: t.voice, description: t.voiceDesc },
-    { id: 'theme', label: t.theme, description: t.themeDesc },
-    { id: 'language', label: t.language, description: t.languageDesc },
+  // Make tabs reactive by using a function that tracks language changes
+  const getTabs = () => [
+    { id: 'provider', label: t().provider, description: t().providerDesc },
+    { id: 'permission', label: t().permission, description: t().permissionDesc },
+    { id: 'compaction', label: t().compaction, description: t().compactionDesc },
+    { id: 'voice', label: t().voice, description: t().voiceDesc },
+    { id: 'theme', label: t().theme, description: t().themeDesc },
+    { id: 'language', label: t().language, description: t().languageDesc },
   ]
 
   return (
     <div class="settings-overlay" onClick={props.onClose}>
       <div class="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div class="settings-header">
-          <h2>{t.settings}</h2>
+          <h2>{t().settings}</h2>
           <button class="close-btn" onClick={props.onClose}>
             <CloseIcon size={16} />
           </button>
@@ -34,7 +35,7 @@ export const SettingsPanel: Component<SettingsPanelProps> = (props) => {
 
         <div class="settings-body">
           <nav class="settings-nav">
-            <For each={tabs}>
+            <For each={getTabs()}>
               {(tab) => (
                 <button
                   class="nav-item"
@@ -80,11 +81,11 @@ const ProviderSettings: Component = () => {
 
   return (
     <div class="settings-section">
-      <h3>{t.providerConfig}</h3>
-      <p class="section-desc">{t.providerDesc}</p>
+      <h3>{t().providerConfig}</h3>
+      <p class="section-desc">{t().providerDesc}</p>
 
       <div class="form-group">
-        <label>{t.aiProvider}</label>
+        <label>{t().aiProvider}</label>
         <select
           value={settings.settings.provider.provider}
           onChange={(e) => settings.updateProvider({ provider: e.currentTarget.value as any })}
@@ -97,7 +98,7 @@ const ProviderSettings: Component = () => {
       </div>
 
       <div class="form-group">
-        <label>{t.apiKey}</label>
+        <label>{t().apiKey}</label>
         <input
           type="password"
           value={settings.settings.provider.apiKey}
@@ -107,7 +108,7 @@ const ProviderSettings: Component = () => {
       </div>
 
       <div class="form-group">
-        <label>{t.baseUrl}</label>
+        <label>{t().baseUrl}</label>
         <input
           type="text"
           value={settings.settings.provider.baseUrl}
@@ -117,7 +118,7 @@ const ProviderSettings: Component = () => {
       </div>
 
       <div class="form-group">
-        <label>{t.model}</label>
+        <label>{t().model}</label>
         <input
           type="text"
           value={settings.settings.provider.model}
@@ -126,7 +127,7 @@ const ProviderSettings: Component = () => {
         />
       </div>
 
-      <button class="btn-primary">{t.testConnection}</button>
+      <button class="btn-primary">{t().testConnection}</button>
     </div>
   )
 }
@@ -135,32 +136,32 @@ const PermissionSettings: Component = () => {
   const { t } = useI18n()
   const settings = useSettings()
 
-  const modeOptions = [
-    { value: 'permissive', label: t.permissive },
-    { value: 'default', label: t.defaultMode },
-    { value: 'askAll', label: t.askAll },
-    { value: 'plan', label: t.planMode },
+  const getModeOptions = () => [
+    { value: 'permissive', label: t().permissive },
+    { value: 'default', label: t().defaultMode },
+    { value: 'askAll', label: t().askAll },
+    { value: 'plan', label: t().planMode },
   ]
 
   return (
     <div class="settings-section">
-      <h3>{t.permissionConfig}</h3>
-      <p class="section-desc">{t.permissionDesc}</p>
+      <h3>{t().permissionConfig}</h3>
+      <p class="section-desc">{t().permissionDesc}</p>
 
       <div class="form-group">
-        <label>{t.permissionMode}</label>
+        <label>{t().permissionMode}</label>
         <select
           value={settings.settings.permission.mode}
           onChange={(e) => settings.updatePermission({ mode: e.currentTarget.value as any })}
         >
-          <For each={modeOptions}>
+          <For each={getModeOptions()}>
             {(opt) => <option value={opt.value}>{opt.label}</option>}
           </For>
         </select>
       </div>
 
       <div class="form-group">
-        <label>{t.dangerousTools}</label>
+        <label>{t().dangerousTools}</label>
         <div class="tool-list">
           <For each={Object.entries(settings.settings.permission.dangerousTools)}>
             {([tool, action]) => (
@@ -177,9 +178,9 @@ const PermissionSettings: Component = () => {
                     })
                   }
                 >
-                  <option value="allow">{t.allow}</option>
-                  <option value="deny">{t.deny}</option>
-                  <option value="ask">{t.ask}</option>
+                  <option value="allow">{t().allow}</option>
+                  <option value="deny">{t().deny}</option>
+                  <option value="ask">{t().ask}</option>
                 </select>
               </div>
             )}
@@ -196,11 +197,11 @@ const CompactionSettings: Component = () => {
 
   return (
     <div class="settings-section">
-      <h3>{t.compactionConfig}</h3>
-      <p class="section-desc">{t.compactionDesc}</p>
+      <h3>{t().compactionConfig}</h3>
+      <p class="section-desc">{t().compactionDesc}</p>
 
       <div class="form-group">
-        <label>{t.tokenThreshold}</label>
+        <label>{t().tokenThreshold}</label>
         <input
           type="number"
           value={settings.settings.compaction.tokenThreshold}
@@ -208,11 +209,11 @@ const CompactionSettings: Component = () => {
             settings.updateCompaction({ tokenThreshold: parseInt(e.currentTarget.value) || 80000 })
           }
         />
-        <span class="hint">{t.compactionWarning}</span>
+        <span class="hint">{t().compactionWarning}</span>
       </div>
 
       <div class="form-group">
-        <label>{t.compactionWarning}</label>
+        <label>{t().compactionWarning}</label>
         <input
           type="number"
           value={settings.settings.compaction.warningThreshold}
@@ -223,13 +224,13 @@ const CompactionSettings: Component = () => {
       </div>
 
       <div class="form-group">
-        <label>{t.protectedTools}</label>
+        <label>{t().protectedTools}</label>
         <div class="tool-list">
           <For each={settings.settings.compaction.protectedTools}>
             {(tool) => <span class="tag">{tool}</span>}
           </For>
         </div>
-        <span class="hint">{t.protectedToolsHint}</span>
+        <span class="hint">{t().protectedToolsHint}</span>
       </div>
     </div>
   )
@@ -241,8 +242,8 @@ const VoiceSettings: Component = () => {
 
   return (
     <div class="settings-section">
-      <h3>{t.voiceConfig}</h3>
-      <p class="section-desc">{t.voiceDesc}</p>
+      <h3>{t().voiceConfig}</h3>
+      <p class="section-desc">{t().voiceDesc}</p>
 
       <div class="form-group">
         <label class="checkbox-label">
@@ -251,24 +252,24 @@ const VoiceSettings: Component = () => {
             checked={settings.settings.voice.enabled}
             onChange={(e) => settings.updateVoice({ enabled: e.currentTarget.checked })}
           />
-          {t.enableVoice}
+          {t().enableVoice}
         </label>
       </div>
 
       <div class="form-group">
-        <label>{t.recognitionEngine}</label>
+        <label>{t().recognitionEngine}</label>
         <select
           value={settings.settings.voice.engine}
           onChange={(e) => settings.updateVoice({ engine: e.currentTarget.value as any })}
           disabled={!settings.settings.voice.enabled}
         >
-          <option value="webspeech">{t.webSpeech}</option>
-          <option value="whisper">{t.whisperLocal}</option>
+          <option value="webspeech">{t().webSpeech}</option>
+          <option value="whisper">{t().whisperLocal}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label>{t.shortcut}</label>
+        <label>{t().shortcut}</label>
         <input
           type="text"
           value={settings.settings.voice.shortcut}
@@ -285,7 +286,7 @@ const VoiceSettings: Component = () => {
             onChange={(e) => settings.updateVoice({ autoSend: e.currentTarget.checked })}
             disabled={!settings.settings.voice.enabled}
           />
-          {t.autoSend}
+          {t().autoSend}
         </label>
       </div>
 
@@ -297,7 +298,7 @@ const VoiceSettings: Component = () => {
             onChange={(e) => settings.updateVoice({ showWaveform: e.currentTarget.checked })}
             disabled={!settings.settings.voice.enabled}
           />
-          {t.showWaveform}
+          {t().showWaveform}
         </label>
       </div>
     </div>
@@ -310,11 +311,11 @@ const ThemeSettings: Component = () => {
 
   return (
     <div class="settings-section">
-      <h3>{t.themeConfig}</h3>
-      <p class="section-desc">{t.themeDesc}</p>
+      <h3>{t().themeConfig}</h3>
+      <p class="section-desc">{t().themeDesc}</p>
 
       <div class="form-group">
-        <label>{t.theme}</label>
+        <label>{t().theme}</label>
         <div class="theme-options">
           <button
             class="theme-btn"
@@ -322,7 +323,7 @@ const ThemeSettings: Component = () => {
             onClick={() => settings.updateTheme('system')}
           >
             <MonitorIcon size={16} />
-            <span>{t.systemTheme}</span>
+            <span>{t().systemTheme}</span>
           </button>
           <button
             class="theme-btn"
@@ -330,7 +331,7 @@ const ThemeSettings: Component = () => {
             onClick={() => settings.updateTheme('dark')}
           >
             <MoonIcon size={16} />
-            <span>{t.darkTheme}</span>
+            <span>{t().darkTheme}</span>
           </button>
           <button
             class="theme-btn"
@@ -338,13 +339,13 @@ const ThemeSettings: Component = () => {
             onClick={() => settings.updateTheme('light')}
           >
             <SunIcon size={16} />
-            <span>{t.lightTheme}</span>
+            <span>{t().lightTheme}</span>
           </button>
         </div>
       </div>
 
       <div class="form-group">
-        <label>{t.fontSize}</label>
+        <label>{t().fontSize}</label>
         <div class="input-with-suffix">
           <input
             type="number"
@@ -358,7 +359,7 @@ const ThemeSettings: Component = () => {
       </div>
 
       <div class="form-group">
-        <label>{t.fontFamily}</label>
+        <label>{t().fontFamily}</label>
         <select
           value={settings.settings.fontFamily}
           onChange={(e) => settings.updateFontFamily(e.currentTarget.value)}
@@ -371,7 +372,7 @@ const ThemeSettings: Component = () => {
       </div>
 
       <button class="btn-secondary" onClick={settings.resetToDefaults}>
-        {t.resetDefaults}
+        {t().resetDefaults}
       </button>
     </div>
   )
@@ -382,25 +383,25 @@ const LanguageSettings: Component = () => {
 
   return (
     <div class="settings-section">
-      <h3>{t.languageConfig}</h3>
-      <p class="section-desc">{t.languageDesc}</p>
+      <h3>{t().languageConfig}</h3>
+      <p class="section-desc">{t().languageDesc}</p>
 
       <div class="form-group">
-        <label>{t.language}</label>
+        <label>{t().language}</label>
         <div class="theme-options">
           <button
             class="theme-btn"
             classList={{ active: locale() === 'zh' }}
             onClick={() => setLocale('zh')}
           >
-            <span>{t.chinese}</span>
+            <span>{t().chinese}</span>
           </button>
           <button
             class="theme-btn"
             classList={{ active: locale() === 'en' }}
             onClick={() => setLocale('en')}
           >
-            <span>{t.english}</span>
+            <span>{t().english}</span>
           </button>
         </div>
       </div>

@@ -75,33 +75,33 @@ export const PanelSystem: Component = () => {
             class="app-logo"
             data-theme={getEffectiveTheme()}
           />
-          <span class="app-name">{t.appName}</span>
+          <span class="app-name">{t().appName}</span>
         </div>
         <div class="title-bar-center">
           <button
             class={`mode-switch ${layout.layout.mode === 'simple' ? 'active' : ''}`}
             onClick={() => layout.setMode('simple')}
           >
-            {t.simpleMode}
+            {t().simpleMode}
           </button>
           <button
             class={`mode-switch ${layout.layout.mode === 'pro' ? 'active' : ''}`}
             onClick={() => layout.setMode('pro')}
           >
-            {t.proMode}
+            {t().proMode}
           </button>
         </div>
         <div class="title-bar-right">
-          <button class="btn-icon" title={t.settings} onClick={() => setShowSettings(true)}>
+          <button class="btn-icon" title={t().settings} onClick={() => setShowSettings(true)}>
             <SettingsIcon size={16} />
           </button>
-          <button class="btn-icon window-control" onClick={minimizeWindow} title={t.minimize}>
+          <button class="btn-icon window-control" onClick={minimizeWindow} title={t().minimize}>
             <MinimizeIcon size={14} />
           </button>
-          <button class="btn-icon window-control" onClick={toggleMaximize} title={t.maximize}>
+          <button class="btn-icon window-control" onClick={toggleMaximize} title={t().maximize}>
             <MaximizeIcon size={14} />
           </button>
-          <button class="btn-icon window-control close" onClick={closeWindow} title={t.close}>
+          <button class="btn-icon window-control close" onClick={closeWindow} title={t().close}>
             <CloseIcon size={14} />
           </button>
         </div>
@@ -124,25 +124,25 @@ export const PanelSystem: Component = () => {
         >
           <button onClick={() => handleAddPanel('agent')}>
             <ChatIcon size={14} />
-            {t.addAgentPanel}
+            {t().addAgentPanel}
           </button>
           <button onClick={() => handleAddPanel('explorer')}>
             <FolderIcon size={14} />
-            {t.addExplorerPanel}
+            {t().addExplorerPanel}
           </button>
           <button onClick={() => handleAddPanel('terminal')}>
             <TerminalIcon size={14} />
-            {t.addConsolePanel}
+            {t().addConsolePanel}
           </button>
         </div>
       </Show>
 
       <footer class="status-bar">
         <span class="status-mode">
-          [{layout.layout.mode === 'simple' ? t.simpleMode : t.proMode}]
+          [{layout.layout.mode === 'simple' ? t().simpleMode : t().proMode}]
         </span>
-        <span class="status-ready">{t.ready}</span>
-        <span class="status-panels">{t.panelCount}: {layout.layout.panels.length}</span>
+        <span class="status-ready">{t().ready}</span>
+        <span class="status-panels">{t().panelCount}: {layout.layout.panels.length}</span>
       </footer>
 
       <Show when={showSettings()}>
@@ -261,7 +261,7 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout>; t: any; onAddPa
                     e.stopPropagation()
                     props.onAddPanel(panel.type)
                   }}
-                  title={props.t.addPanel}
+                  title={props.t().addPanel}
                 >
                   <PlusIcon size={12} />
                 </button>

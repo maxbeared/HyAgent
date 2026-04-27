@@ -361,7 +361,7 @@ const translations: Record<Locale, Translations> = {
 interface I18nContextValue {
   locale: Accessor<Locale>
   setLocale: (locale: Locale) => void
-  t: Translations
+  t: Accessor<Translations>
 }
 
 const I18nContext = createContext<I18nContextValue>()
@@ -369,16 +369,16 @@ const I18nContext = createContext<I18nContextValue>()
 export const I18nProvider: ParentComponent = (props) => {
   const settings = useSettings()
 
+  const locale = () => settings.settings.language
+
   const setLocale = (newLocale: Locale) => {
     settings.updateLanguage(newLocale)
   }
 
   const value: I18nContextValue = {
-    locale: () => settings.settings.language,
+    locale,
     setLocale,
-    get t() {
-      return translations[settings.settings.language]
-    },
+    t: () => translations[locale()],
   }
 
   return (

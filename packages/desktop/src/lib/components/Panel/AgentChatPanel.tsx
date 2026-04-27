@@ -33,7 +33,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
 
     const config = settings.settings.provider
     if (!config.apiKey) {
-      setError(t.configureApiKey)
+      setError(t().configureApiKey)
       return
     }
 
@@ -94,7 +94,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
             }],
           }])
         } else if (event.type === 'error') {
-          setError(event.error || t.unknownError)
+          setError(event.error || t().unknownError)
         }
       }
     } catch (e) {
@@ -112,8 +112,8 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
             <div class="empty-icon">
               <ChatIcon size={48} />
             </div>
-            <div class="empty-title">{t.startConversation}</div>
-            <div class="empty-desc">{t.typeToBegin}</div>
+            <div class="empty-title">{t().startConversation}</div>
+            <div class="empty-desc">{t().typeToBegin}</div>
           </div>
         </Show>
 
@@ -122,7 +122,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
             <div class={`message ${msg.role}`}>
               <div class="message-header">
                 <span class="message-role">
-                  {msg.role === 'user' ? t.you : t.agent}
+                  {msg.role === 'user' ? t().you : t().agent}
                 </span>
                 <span class="message-time">
                   {new Date(msg.timestamp).toLocaleTimeString()}
@@ -162,7 +162,7 @@ export const AgentChatPanel: Component<AgentChatPanelProps> = (props) => {
       <div class="chat-input">
         <input
           type="text"
-          placeholder={isStreaming() ? t.agentThinking : t.typeMessage}
+          placeholder={isStreaming() ? t().agentThinking : t().typeMessage}
           value={input()}
           onInput={(e) => setInput(e.currentTarget.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}

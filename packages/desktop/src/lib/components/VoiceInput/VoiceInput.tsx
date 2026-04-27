@@ -68,11 +68,11 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error)
       if (event.error === 'not-allowed') {
-        setError(t.microphoneDenied)
+        setError(t().microphoneDenied)
       } else if (event.error === 'no-speech') {
-        setError(t.noSpeechDetected)
+        setError(t().noSpeechDetected)
       } else {
-        setError(`${t.error}: ${event.error}`)
+        setError(`${t().error}: ${event.error}`)
       }
       setState('idle')
     }
@@ -94,7 +94,7 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
     }
 
     if (!recognition) {
-      setError(t.speechNotSupported)
+      setError(t().speechNotSupported)
       return
     }
 
@@ -144,7 +144,7 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
           disabled: props.disabled || !isSupported(),
         }}
         onClick={() => (state() === 'idle' ? startListening() : stopListening())}
-        title={`${t.voiceInput} (Ctrl+Shift+V)`}
+        title={`${t().voiceInput} (Ctrl+Shift+V)`}
         disabled={props.disabled || !isSupported()}
       >
         <Show when={state() === 'listening'}>
@@ -164,10 +164,10 @@ export const VoiceInput: Component<VoiceInputProps> = (props) => {
       <Show when={state() !== 'idle' || transcript()}>
         <div class="transcript-preview">
           <Show when={state() === 'listening'}>
-            <span class="listening-text">{transcript() || t.listening}</span>
+            <span class="listening-text">{transcript() || t().listening}</span>
           </Show>
           <Show when={state() === 'processing'}>
-            <span class="processing-text">{t.processing}</span>
+            <span class="processing-text">{t().processing}</span>
           </Show>
         </div>
       </Show>

@@ -136,12 +136,12 @@ export const FileExplorerPanel: Component = () => {
   return (
     <div class="file-explorer-panel">
       <div class="explorer-header">
-        <span class="explorer-path">{rootPath() || t.noFolderOpened}</span>
+        <span class="explorer-path">{rootPath() || t().noFolderOpened}</span>
         <div class="explorer-actions">
-          <button class="explorer-btn" onClick={refreshFolder} title={t.refresh || 'Refresh'} disabled={!rootPath()}>
+          <button class="explorer-btn" onClick={refreshFolder} title={t().refresh || 'Refresh'} disabled={!rootPath()}>
             <RefreshIcon size={14} />
           </button>
-          <button class="explorer-btn" onClick={openFolderDialog} title={t.openFolder}>
+          <button class="explorer-btn" onClick={openFolderDialog} title={t().openFolder}>
             <FolderOpenIcon size={14} />
           </button>
         </div>
@@ -157,10 +157,10 @@ export const FileExplorerPanel: Component = () => {
             <div class="empty-explorer-icon">
               <FolderOpenIcon size={48} />
             </div>
-            <div class="empty-explorer-title">{t.noFolderOpened}</div>
-            <div class="empty-explorer-desc">{t.clickToOpenFolder}</div>
+            <div class="empty-explorer-title">{t().noFolderOpened}</div>
+            <div class="empty-explorer-desc">{t().clickToOpenFolder}</div>
             <button class="empty-explorer-btn" onClick={openFolderDialog}>
-              {t.openFolder}
+              {t().openFolder}
             </button>
           </div>
         </Show>

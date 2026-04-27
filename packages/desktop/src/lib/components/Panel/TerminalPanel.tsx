@@ -168,12 +168,12 @@ export const TerminalPanel: Component = () => {
               </div>
             )}
           </For>
-          <button class="terminal-tab" onClick={addTab} title={t.newTab}>
+          <button class="terminal-tab" onClick={addTab} title={t().newTab}>
             <PlusIcon size={12} />
           </button>
         </div>
         <div class="terminal-actions">
-          <button class="explorer-btn" onClick={clearTerminal} title={t.clearTerminal}>
+          <button class="explorer-btn" onClick={clearTerminal} title={t().clearTerminal}>
             <TrashIcon size={14} />
           </button>
         </div>

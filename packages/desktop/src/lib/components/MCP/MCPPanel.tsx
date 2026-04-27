@@ -32,13 +32,13 @@ export const MCPPanel: Component = () => {
   const getStatusText = (status: MCPConnectionStatus): string => {
     switch (status) {
       case 'connected':
-        return t.connected
+        return t().connected
       case 'connecting':
-        return t.connecting
+        return t().connecting
       case 'disconnected':
-        return t.disconnected
+        return t().disconnected
       case 'error':
-        return t.error
+        return t().error
       default:
         return 'Unknown'
     }
@@ -47,8 +47,8 @@ export const MCPPanel: Component = () => {
   return (
     <div class="mcp-panel">
       <div class="mcp-header">
-        <span>{t.mcpServers}</span>
-        <button class="add-btn" onClick={handleAddServer} title={t.add}>
+        <span>{t().mcpServers}</span>
+        <button class="add-btn" onClick={handleAddServer} title={t().add}>
           <PlusIcon size={14} />
         </button>
       </div>
@@ -59,10 +59,10 @@ export const MCPPanel: Component = () => {
             <div class="empty-icon">
               <PlugIcon size={36} />
             </div>
-            <div class="empty-title">{t.noMCPServers}</div>
-            <div class="empty-desc">{t.addServerToExtend}</div>
+            <div class="empty-title">{t().noMCPServers}</div>
+            <div class="empty-desc">{t().addServerToExtend}</div>
             <button class="add-first-btn" onClick={handleAddServer}>
-              {t.addServer}
+              {t().addServer}
             </button>
           </div>
         </Show>
@@ -81,10 +81,10 @@ export const MCPPanel: Component = () => {
                 {getStatusText(mcp.getConnectionStatus(server.name))}
               </div>
               <div class="server-actions">
-                <button class="action-btn" title={t.edit}>
+                <button class="action-btn" title={t().edit}>
                   <EditIcon size={14} />
                 </button>
-                <button class="action-btn" title={t.delete}>
+                <button class="action-btn" title={t().delete}>
                   <TrashIcon size={14} />
                 </button>
               </div>
@@ -97,37 +97,37 @@ export const MCPPanel: Component = () => {
         <div class="dialog-overlay" onClick={() => setShowAddDialog(false)}>
           <div class="dialog" onClick={(e) => e.stopPropagation()}>
             <div class="dialog-header">
-              <h3>{t.addMCPServer}</h3>
+              <h3>{t().addMCPServer}</h3>
               <button onClick={() => setShowAddDialog(false)}>
                 <CloseIcon size={16} />
               </button>
             </div>
             <div class="dialog-body">
               <div class="form-group">
-                <label>{t.serverName}</label>
+                <label>{t().serverName}</label>
                 <input type="text" placeholder="my-mcp-server" />
               </div>
               <div class="form-group">
-                <label>{t.transportType}</label>
+                <label>{t().transportType}</label>
                 <select>
-                  <option value="stdio">{t.stdio}</option>
-                  <option value="http">{t.httpSSE}</option>
+                  <option value="stdio">{t().stdio}</option>
+                  <option value="http">{t().httpSSE}</option>
                 </select>
               </div>
               <div class="form-group">
-                <label>{t.commandStdio}</label>
+                <label>{t().commandStdio}</label>
                 <input type="text" placeholder="npx @modelcontextprotocol/server-filesystem" />
               </div>
               <div class="form-group">
-                <label>{t.urlHttp}</label>
+                <label>{t().urlHttp}</label>
                 <input type="text" placeholder="http://localhost:3001/mcp" />
               </div>
             </div>
             <div class="dialog-footer">
               <button class="btn-cancel" onClick={() => setShowAddDialog(false)}>
-                {t.cancel}
+                {t().cancel}
               </button>
-              <button class="btn-add">{t.addServer}</button>
+              <button class="btn-add">{t().addServer}</button>
             </div>
           </div>
         </div>
