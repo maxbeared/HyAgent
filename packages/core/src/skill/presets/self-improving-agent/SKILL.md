@@ -480,7 +480,7 @@ This repo uses that default to avoid committing sensitive or noisy local logs by
 **Track learnings in repo** (team-wide):
 Don't add to .gitignore - learnings become shared knowledge.
 
-**Hybrid** (track templates, ignore entries):
+**HyAgent** (track templates, ignore entries):
 ```gitignore
 .learnings/*.md
 !.learnings/.gitkeep

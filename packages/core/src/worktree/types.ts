@@ -55,7 +55,7 @@ export interface WorktreeConfig {
 }
 
 export const WorktreeConfigSchema = z.object({
-  basePath: z.string().default(() => join(homedir(), '.hybrid-agent', 'worktrees')),
+  basePath: z.string().default(() => join(homedir(), '.hyagent', 'worktrees')),
   defaultBranch: z.string().default('main'),
   autoCleanup: z.boolean().default(true),
   maxWorktrees: z.number().default(10),

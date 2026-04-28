@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { AgentService, agentService, type Session } from '../../src/lib/services/agentService'
-import type { AgentConfig, AgentStreamEvent } from '@hybrid-agent/core'
+import type { AgentConfig, AgentStreamEvent } from '@hyagent/core'
 
 describe('AgentService', () => {
   let service: AgentService

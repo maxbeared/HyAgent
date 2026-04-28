@@ -1,5 +1,5 @@
 /**
- * Hybrid Agent - 结合Claude Code安全特性与OpenCode架构
+ * HyAgent - 结合Claude Code安全特性与OpenCode架构
  *
  * 本项目融合两个参考项目的最佳特性:
  * - Claude Code: 成熟的安全沙箱、权限管道、Coordinator模式

@@ -10,8 +10,8 @@ mod tests {
 
     #[test]
     fn test_tray_tooltip_default() {
-        let tooltip = "Hybrid Agent";
-        assert_eq!(tooltip, "Hybrid Agent");
+        let tooltip = "HyAgent";
+        assert_eq!(tooltip, "HyAgent");
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
-    log::info!("Starting Hybrid Agent Desktop...");
+    log::info!("Starting HyAgent Desktop...");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -103,7 +103,7 @@ pub fn run() {
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("Hybrid Agent")
+                .tooltip("HyAgent")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {

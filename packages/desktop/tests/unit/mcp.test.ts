@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { useMCP, type MCPState } from '../../src/lib/stores/mcp'
-import type { MCPServer, MCPConnectionStatus } from '@hybrid-agent/core'
+import type { MCPServer, MCPConnectionStatus } from '@hyagent/core'
 
 describe('MCP Store', () => {
   // The store is a singleton with module-level state

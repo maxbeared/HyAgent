@@ -35,10 +35,10 @@ export type FontSizeScheme = 'small' | 'medium' | 'large' | 'xlarge'
 export type FontFamilyScheme = 'jetbrains' | 'fira' | 'consolas' | 'monaco'
 
 export const FONT_SIZE_PRESETS: Record<FontSizeScheme, number> = {
-  small: 11,
-  medium: 13,
+  small: 12,
+  medium: 14,
   large: 16,
-  xlarge: 19,
+  xlarge: 20,
 }
 
 export const FONT_FAMILY_PRESETS: Record<FontFamilyScheme, string> = {
@@ -105,14 +105,14 @@ const defaultSettings: SettingsState = {
     showWaveform: true,
   },
   theme: 'system',
-  fontSize: 13,
+  fontSize: 14,
   fontFamily: 'JetBrains Mono',
   language: detectSystemLanguage(),
 }
 
 function loadSettings(): SettingsState | null {
   try {
-    const saved = localStorage.getItem('hybrid-agent-settings')
+    const saved = localStorage.getItem('hyagent-settings')
     if (saved) {
       const parsed = JSON.parse(saved)
       // If no language is saved (old settings), use system language
@@ -180,7 +180,7 @@ if (typeof document !== 'undefined' && window.matchMedia) {
 export function useSettings() {
   const saveSettings = () => {
     try {
-      localStorage.setItem('hybrid-agent-settings', JSON.stringify(settings))
+      localStorage.setItem('hyagent-settings', JSON.stringify(settings))
     } catch (e) {
       console.error('Failed to save settings:', e)
     }

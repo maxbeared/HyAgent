@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js'
-import type { MCPServer, MCPConnectionStatus } from '@hybrid-agent/core'
+import type { MCPServer, MCPConnectionStatus } from '@hyagent/core'
 
 export interface MCPState {
   servers: Map<string, MCPServer>

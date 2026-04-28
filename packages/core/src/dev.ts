@@ -1,5 +1,5 @@
 /**
- * Hybrid Agent - Development Entry Point
+ * HyAgent - Development Entry Point
  *
  * Run with: pnpm dev
  *
@@ -26,14 +26,14 @@ if (!config.apiKey) {
   console.warn('  See CLAUDE.md for configuration options.')
 }
 
-console.log(`[Hybrid Agent] Provider: ${config.provider}, Model: ${config.model}`)
-console.log(`[Hybrid Agent] Config suggestions found: ${suggestions.length}`)
+console.log(`[HyAgent] Provider: ${config.provider}, Model: ${config.model}`)
+console.log(`[HyAgent] Config suggestions found: ${suggestions.length}`)
 
 const app = createApp({ current: config, suggestions })
 
 serve({ fetch: app.fetch, port: PORT }, info => {
-  console.log(`[Hybrid Agent] Server running at http://localhost:${info.port}`)
-  console.log(`[Hybrid Agent] Health: http://localhost:${info.port}/health`)
-  console.log(`[Hybrid Agent] Agent: POST http://localhost:${info.port}/api/agent/execute`)
-  console.log(`[Hybrid Agent] Stream: GET  http://localhost:${info.port}/api/agent/stream?task=...`)
+  console.log(`[HyAgent] Server running at http://localhost:${info.port}`)
+  console.log(`[HyAgent] Health: http://localhost:${info.port}/health`)
+  console.log(`[HyAgent] Agent: POST http://localhost:${info.port}/api/agent/execute`)
+  console.log(`[HyAgent] Stream: GET  http://localhost:${info.port}/api/agent/stream?task=...`)
 })

@@ -42,12 +42,12 @@
 }
 
 .app-logo {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
 }
 
 .app-logo[data-theme="dark"] {
-  filter: brightness(0) invert(0.85) sepia(1) hue-rotate(-5deg) saturate(3);
+  filter: brightness(0) invert(1) sepia(1) saturate(2) hue-rotate(-10deg);
 }
 
 .app-logo[data-theme="light"] {

@@ -1,7 +1,7 @@
 /**
  * Configuration management
- * Scans for config files from hybrid-agent, Claude Code, and OpenCode.
- * hybrid-agent config is applied directly; others are presented as suggestions.
+ * Scans for config files from hyagent, Claude Code, and OpenCode.
+ * hyagent config is applied directly; others are presented as suggestions.
  */
 
 import { existsSync, readFileSync } from 'fs'
@@ -16,17 +16,17 @@ export interface Config {
 }
 
 export interface ConfigSuggestion {
-  source: 'hybrid-agent' | 'claude' | 'opencode'
+  source: 'hyagent' | 'claude' | 'opencode'
   path: string
   config: Partial<Config>
 }
 
 function scanConfigPaths(): string[] {
   const candidates = [
-    // hybrid-agent
-    path.join(os.homedir(), '.hybrid-agent', 'config.json'),
-    path.join(os.homedir(), '.config', 'hybrid-agent', 'config.json'),
-    path.join(process.env.APPDATA || '', 'hybrid-agent', 'config.json'),
+    // hyagent
+    path.join(os.homedir(), '.hyagent', 'config.json'),
+    path.join(os.homedir(), '.config', 'hyagent', 'config.json'),
+    path.join(process.env.APPDATA || '', 'hyagent', 'config.json'),
     // Claude Code
     path.join(os.homedir(), '.claude', 'settings.json'),
     path.join(process.env.APPDATA || '', 'Claude', 'settings.json'),
@@ -58,7 +58,7 @@ function importConfig(configPath: string, base: Config): Config {
       data = JSON.parse(jsonContent)
     }
 
-    // hybrid-agent native format: { provider, apiKey, baseUrl, model }
+    // hyagent native format: { provider, apiKey, baseUrl, model }
     if (data.provider && data.apiKey && typeof data.provider === 'string') {
       return { ...base, ...data }
     }
@@ -99,10 +99,10 @@ function importConfig(configPath: string, base: Config): Config {
   }
 }
 
-function sourceFromPath(configPath: string): 'hybrid-agent' | 'claude' | 'opencode' {
+function sourceFromPath(configPath: string): 'hyagent' | 'claude' | 'opencode' {
   if (configPath.includes('.claude')) return 'claude'
   if (configPath.includes('opencode')) return 'opencode'
-  return 'hybrid-agent'
+  return 'hyagent'
 }
 
 export function loadConfig(): { config: Config; suggestions: ConfigSuggestion[] } {
@@ -119,9 +119,9 @@ export function loadConfig(): { config: Config; suggestions: ConfigSuggestion[] 
     if (!imported.apiKey) continue
 
     const source = sourceFromPath(configPath)
-    if (source === 'hybrid-agent') {
+    if (source === 'hyagent') {
       config = imported
-      console.log(`Loaded hybrid-agent config from: ${configPath}`)
+      console.log(`Loaded hyagent config from: ${configPath}`)
     } else {
       suggestions.push({ source, path: configPath, config: imported })
       console.log(`Found ${source} config at: ${configPath} (as suggestion)`)

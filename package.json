@@ -1,13 +1,13 @@
 {
-  "name": "hybrid-agent",
+  "name": "hyagent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @hybrid-agent/core dev",
-    "build": "pnpm --filter @hybrid-agent/core build",
-    "typecheck": "pnpm --filter @hybrid-agent/core typecheck",
-    "test": "pnpm --filter @hybrid-agent/core test"
+    "dev": "pnpm --filter @hyagent/core dev",
+    "build": "pnpm --filter @hyagent/core build",
+    "typecheck": "pnpm --filter @hyagent/core typecheck",
+    "test": "pnpm --filter @hyagent/core test"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

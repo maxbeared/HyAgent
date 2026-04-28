@@ -99,7 +99,7 @@ describe('Settings Store', () => {
 
       updateProvider({ model: 'claude-3-5-haiku' })
 
-      const saved = localStorage.getItem('hybrid-agent-settings')
+      const saved = localStorage.getItem('hyagent-settings')
       expect(saved).toBeTruthy()
       const parsed = JSON.parse(saved!)
       expect(parsed.provider.model).toBe('claude-3-5-haiku')
@@ -194,21 +194,21 @@ describe('Settings Store', () => {
     })
   })
 
-  describe('updateFontSize', () => {
+  describe('updateFontSizeScheme', () => {
     it('should update font size', () => {
-      const { settings, updateFontSize } = settingsStore
+      const { settings, updateFontSizeScheme } = settingsStore
 
-      updateFontSize(16)
+      updateFontSizeScheme('large')
 
       expect(settings.fontSize).toBe(16)
     })
   })
 
-  describe('updateFontFamily', () => {
+  describe('updateFontFamilyScheme', () => {
     it('should update font family', () => {
-      const { settings, updateFontFamily } = settingsStore
+      const { settings, updateFontFamilyScheme } = settingsStore
 
-      updateFontFamily('Fira Code')
+      updateFontFamilyScheme('fira')
 
       expect(settings.fontFamily).toBe('Fira Code')
     })

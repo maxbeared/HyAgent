@@ -139,7 +139,7 @@ export interface Translations {
 
 const translations: Record<Locale, Translations> = {
   zh: {
-    appName: 'Hybrid Agent',
+    appName: 'HyAgent',
     simpleMode: '简洁模式',
     proMode: '专业模式',
     addPanel: '添加面板',
@@ -254,7 +254,7 @@ const translations: Record<Locale, Translations> = {
     clearTerminal: '清空终端',
   },
   en: {
-    appName: 'Hybrid Agent',
+    appName: 'HyAgent',
     simpleMode: 'Simple',
     proMode: 'Pro',
     addPanel: 'Add Panel',

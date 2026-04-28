@@ -19,13 +19,13 @@ import type { Session, Message } from './types.js'
 /**
  * Database file path
  */
-const DB_PATH = join(homedir(), '.hybrid-agent', 'sessions.db')
+const DB_PATH = join(homedir(), '.hyagent', 'sessions.db')
 
 /**
  * Initialize database directory and connection
  */
 function initDatabase(): Database.Database {
-  const dir = join(homedir(), '.hybrid-agent')
+  const dir = join(homedir(), '.hyagent')
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
@@ -495,7 +495,7 @@ export function dbListCheckpoints(): TaskCheckpoint[] {
 /**
  * Effect tag for Database
  */
-export const DatabaseTag = Context.GenericTag<Database.Database>('@hybrid-agent/database')
+export const DatabaseTag = Context.GenericTag<Database.Database>('@hyagent/database')
 
 /**
  * Layer that provides the database instance

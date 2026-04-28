@@ -1,4 +1,4 @@
-# Hybrid Agent
+# HyAgent
 
 结合 Claude Code 安全特性与 OpenCode 架构的 AI 编码 Agent。
 
@@ -95,7 +95,7 @@
 1. `GET /api/mcp/servers/:name/auth` — 获取认证状态
 2. `POST /api/mcp/servers/:name/auth/start` — 启动 OAuth
 3. `POST /api/mcp/servers/:name/auth/callback` — 完成认证
-4. Token 持久化到 `~/.hybrid-agent/mcp-auth.json`
+4. Token 持久化到 `~/.hyagent/mcp-auth.json`
 
 ### Snapshot (`src/snapshot/`)
 Git-based 文件跟踪和回滚系统。
@@ -169,8 +169,8 @@ CLI REPL 工具，通过 SSE 与 agent 实时交互。
 1. `packages/core/src/skill/presets/` — 预置 Skills
 2. `~/.agents/skills/`
 3. `~/.claude/skills/`
-4. `~/.hybrid-agent/skills/`
-5. `.hybrid-agent/skills/` 或 `skills/`
+4. `~/.hyagent/skills/`
+5. `.hyagent/skills/` 或 `skills/`
 
 **预置 Skills（6个）：**
 - `agent-browser` — 无头浏览器自动化
@@ -353,9 +353,9 @@ pnpm tauri build
 
 # 构建产物
 # Windows: src-tauri/target/release/bundle/
-#   ├── Hybrid-Agent_0.0.0_x64-setup.exe  (~3 MB)
-#   ├── Hybrid-Agent_0.0.0_x64.msi        (~3.7 MB)
-#   └── Hybrid-Agent_0.0.0_x64_en-US.msi
+#   ├── HyAgent_0.0.0_x64-setup.exe  (~3 MB)
+#   ├── HyAgent_0.0.0_x64.msi        (~3.7 MB)
+#   └── HyAgent_0.0.0_x64_en-US.msi
 ```
 
 ### 项目结构
@@ -412,16 +412,16 @@ pnpm build
 
 ```bash
 # 运行所有单元测试
-pnpm --filter @hybrid-agent/core test
+pnpm --filter @hyagent/core test
 
 # 运行单元测试并查看覆盖率
-pnpm --filter @hybrid-agent/core exec vitest run --coverage
+pnpm --filter @hyagent/core exec vitest run --coverage
 
 # 运行 E2E 测试
-pnpm --filter @hybrid-agent/core test:e2e
+pnpm --filter @hyagent/core test:e2e
 
 # 类型检查
-pnpm --filter @hybrid-agent/core typecheck
+pnpm --filter @hyagent/core typecheck
 ```
 
 ### 测试覆盖率

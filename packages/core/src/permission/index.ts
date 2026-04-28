@@ -87,7 +87,7 @@ export interface PermissionService {
 /**
  * Permission service tag for Effect context
  */
-export const PermissionServiceTag = Context.GenericTag<PermissionService>('@hybrid-agent/permission')
+export const PermissionServiceTag = Context.GenericTag<PermissionService>('@hyagent/permission')
 
 // ============================================================================
 // Service Implementation

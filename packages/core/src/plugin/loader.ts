@@ -267,7 +267,7 @@ export function getPluginRegistry(): PluginRegistry {
 /**
  * Plugin Registry tag for Effect context
  */
-export const PluginRegistryTag = Context.GenericTag<PluginRegistry>('@hybrid-agent/plugin-registry')
+export const PluginRegistryTag = Context.GenericTag<PluginRegistry>('@hyagent/plugin-registry')
 
 /**
  * Create a layer that provides the plugin registry

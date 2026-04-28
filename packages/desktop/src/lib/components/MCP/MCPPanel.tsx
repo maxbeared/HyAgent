@@ -2,7 +2,7 @@ import { Component, For, Show, createSignal } from 'solid-js'
 import { useMCP } from '../../stores/mcp'
 import { useI18n } from '../../i18n'
 import { PlugIcon, EditIcon, TrashIcon, PlusIcon, CloseIcon } from '../Icons'
-import type { MCPServer, MCPConnectionStatus } from '@hybrid-agent/core'
+import type { MCPServer, MCPConnectionStatus } from '@hyagent/core'
 import './MCPPanel.css'
 
 export const MCPPanel: Component = () => {

@@ -37,7 +37,7 @@ const defaultProPanels: PanelConfig[] = [
 
 function loadLayout(): LayoutState | null {
   try {
-    const saved = localStorage.getItem('hybrid-agent-layout')
+    const saved = localStorage.getItem('hyagent-layout')
     if (saved) {
       const parsed = JSON.parse(saved)
       if (parsed.panels && Array.isArray(parsed.panels) && parsed.panels.length > 0) {
@@ -66,7 +66,7 @@ function loadLayout(): LayoutState | null {
 
 function saveLayout(state: LayoutState) {
   try {
-    localStorage.setItem('hybrid-agent-layout', JSON.stringify(state))
+    localStorage.setItem('hyagent-layout', JSON.stringify(state))
   } catch (e) {
     console.error('Failed to save layout:', e)
   }

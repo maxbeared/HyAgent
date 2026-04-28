@@ -471,7 +471,7 @@ export function getACPService(config?: Partial<ACPConfig>): ACPService {
   if (!acpService) {
     const defaultConfig: ACPConfig = {
       agentId: `agent-${randomUUID().substring(0, 8)}`,
-      agentName: 'Hybrid Agent',
+      agentName: 'HyAgent',
       heartbeatInterval: 30000,
       discoveryTimeout: 5000,
       messageTimeout: 30000,

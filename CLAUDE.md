@@ -1,4 +1,4 @@
-# Hybrid Agent
+# HyAgent
 
 结合 Claude Code 安全特性与 OpenCode 架构的 AI 编码 Agent。
 

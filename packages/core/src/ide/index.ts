@@ -171,24 +171,24 @@ export class IDEService {
   getExtensionInfo(ide: IDEType): IDEExtensionInfo | undefined {
     const extensionIds: Record<IDEType, Record<string, string>> = {
       vscode: {
-        id: 'hybrid-agent.hybrid-agent',
-        name: 'Hybrid Agent',
+        id: 'hyagent.hyagent',
+        name: 'HyAgent',
         version: '1.0.0',
-        installUrl: 'https://marketplace.visualstudio.com/items?itemName=hybrid-agent.hybrid-agent',
+        installUrl: 'https://marketplace.visualstudio.com/items?itemName=hyagent.hyagent',
       },
       cursor: {
-        id: 'hybrid-agent.hybrid-agent',
-        name: 'Hybrid Agent',
+        id: 'hyagent.hyagent',
+        name: 'HyAgent',
         version: '1.0.0',
       },
       windsurf: {
-        id: 'hybrid-agent.hybrid-agent',
-        name: 'Hybrid Agent',
+        id: 'hyagent.hyagent',
+        name: 'HyAgent',
         version: '1.0.0',
       },
       jetbrains: {
-        id: 'com.hybridagent.hybridagent',
-        name: 'Hybrid Agent',
+        id: 'com.hyagent.hyagent',
+        name: 'HyAgent',
         version: '1.0.0',
       },
       other: {},

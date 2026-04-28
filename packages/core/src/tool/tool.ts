@@ -159,7 +159,7 @@ export interface ToolRegistry {
 /**
  * Tool registry tag for Effect context
  */
-export const ToolRegistryTag = Context.GenericTag<ToolRegistry>('@hybrid-agent/tool-registry')
+export const ToolRegistryTag = Context.GenericTag<ToolRegistry>('@hyagent/tool-registry')
 
 // ============================================================================
 // Input/Output Schemas (examples)

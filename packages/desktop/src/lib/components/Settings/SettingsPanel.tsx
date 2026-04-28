@@ -310,10 +310,10 @@ const ThemeSettings: Component = () => {
   const settings = useSettings()
 
   const fontSizeOptions = () => [
-    { id: 'small', label: t().fontSmall, value: 11 },
-    { id: 'medium', label: t().fontMedium, value: 13 },
+    { id: 'small', label: t().fontSmall, value: 12 },
+    { id: 'medium', label: t().fontMedium, value: 14 },
     { id: 'large', label: t().fontLarge, value: 16 },
-    { id: 'xlarge', label: t().fontXlarge, value: 19 },
+    { id: 'xlarge', label: t().fontXlarge, value: 20 },
   ]
 
   const fontFamilyOptions = () => [

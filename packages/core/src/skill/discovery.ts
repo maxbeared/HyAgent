@@ -6,8 +6,8 @@
  *
  * Skill sources (in priority order):
  * 1. Bundled/preset skills - shipped with the package (highest priority)
- * 2. User skills from ~/.hybrid-agent/skills/
- * 3. Project-level skills from .hybrid-agent/skills/ or skills/
+ * 2. User skills from ~/.hyagent/skills/
+ * 3. Project-level skills from .hyagent/skills/ or skills/
  */
 
 import { readdir, readFile } from 'node:fs/promises'
@@ -41,7 +41,7 @@ function getPresetsDirectory(): string {
  * 1. Bundled preset skills (shipped with package)
  * 2. ~/.agents/skills (user's agent skills)
  * 3. ~/.claude/skills (Claude Code skills)
- * 4. ~/.hybrid-agent/skills (hybrid-agent user skills)
+ * 4. ~/.hyagent/skills (hyagent user skills)
  * 5. Project-level skills
  */
 export async function getSkillDirectories(): Promise<string[]> {
@@ -57,14 +57,14 @@ export async function getSkillDirectories(): Promise<string[]> {
   // 2. User skills from various sources
   dirs.push(join(home, '.agents', 'skills'))
   dirs.push(join(home, '.claude', 'skills'))
-  dirs.push(join(home, '.hybrid-agent', 'skills'))
+  dirs.push(join(home, '.hyagent', 'skills'))
 
   // 3. Project-level skills
   try {
     const cwd = process.cwd()
     dirs.push(join(cwd, '.agents', 'skills'))
     dirs.push(join(cwd, '.claude', 'skills'))
-    dirs.push(join(cwd, '.hybrid-agent', 'skills'))
+    dirs.push(join(cwd, '.hyagent', 'skills'))
     dirs.push(join(cwd, 'skills'))
   } catch {
     // process.cwd() might fail

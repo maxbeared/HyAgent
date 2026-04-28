@@ -170,7 +170,7 @@ export class WorktreeService {
 
   constructor(config: Partial<WorktreeConfig> = {}) {
     this.config = {
-      basePath: join(homedir(), '.hybrid-agent', 'worktrees'),
+      basePath: join(homedir(), '.hyagent', 'worktrees'),
       defaultBranch: 'main',
       autoCleanup: true,
       maxWorktrees: 10,

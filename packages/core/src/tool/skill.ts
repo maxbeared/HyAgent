@@ -33,7 +33,7 @@ export type SkillToolInput = z.infer<typeof SkillToolInputSchema>
 export function createSkillTool(): ToolDef<typeof SkillToolInputSchema, SkillMetadata> {
   return {
     id: 'skill',
-    description: 'Invoke a reusable skill by name. Skills are pre-defined prompt templates stored in ~/.hybrid-agent/skills/ or project-level skills/ directories. Use this when you want to perform a specialized task that has a corresponding skill defined.',
+    description: 'Invoke a reusable skill by name. Skills are pre-defined prompt templates stored in ~/.hyagent/skills/ or project-level skills/ directories. Use this when you want to perform a specialized task that has a corresponding skill defined.',
 
     parameters: SkillToolInputSchema,
 

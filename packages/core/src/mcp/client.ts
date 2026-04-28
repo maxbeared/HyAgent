@@ -102,7 +102,7 @@ export class MCPClientImpl implements MCPClient {
     })
 
     this.client = new Client({
-      name: 'hybrid-agent',
+      name: 'hyagent',
       version: '0.1.0',
     })
 
@@ -130,7 +130,7 @@ export class MCPClientImpl implements MCPClient {
     )
 
     this.client = new Client({
-      name: 'hybrid-agent',
+      name: 'hyagent',
       version: '0.1.0',
     })
 

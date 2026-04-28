@@ -53,7 +53,7 @@ const DEFAULT_CONFIG: BudgetConfig = {
   maxFileSizeChars: 100_000,   // 100KB before forcing to disk
   truncatePreviewChars: 2_000, // Preview shown to model
   retentionMs: 7 * 24 * 60 * 60 * 1000, // 7 days
-  outputDir: '.hybrid-agent/tool-outputs',
+  outputDir: '.hyagent/tool-outputs',
 }
 
 // ============================================================================

@@ -606,7 +606,7 @@ export interface LSPService {
   workspaceSymbol(query: string): Effect.Effect<LSPSymbol[]>
 }
 
-export const LSPServiceTag = Context.GenericTag<LSPService>('@hybrid-agent/lsp')
+export const LSPServiceTag = Context.GenericTag<LSPService>('@hyagent/lsp')
 
 export const LSPStatus = z.object({
   id: z.string(),

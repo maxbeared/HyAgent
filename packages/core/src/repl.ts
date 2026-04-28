@@ -5,7 +5,7 @@
 import * as readline from 'readline'
 import { stdin, stdout } from 'process'
 
-const DEFAULT_BASE_URL = process.env.HYBRID_AGENT_URL ?? 'http://localhost:3001'
+const DEFAULT_BASE_URL = process.env.HYAGENT_URL ?? 'http://localhost:3001'
 
 // ---- Command definitions ----
 
@@ -245,7 +245,7 @@ function question(rl: readline.Interface, prompt: string): Promise<string> {
 async function runREPL() {
   let currentSessionId: string | undefined
 
-  stdout.write('Hybrid Agent REPL\n')
+  stdout.write('HyAgent REPL\n')
   stdout.write('Type / for slash commands, /help for available commands.\n\n')
 
   const rl = createREPL()

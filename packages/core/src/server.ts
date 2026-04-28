@@ -101,7 +101,7 @@ async function fetchModelsFromModelsDev(): Promise<Record<string, any>> {
   }
   try {
     const response = await fetch('https://models.dev/api.json', {
-      headers: { 'User-Agent': 'HybridAgent/1.0' },
+      headers: { 'User-Agent': 'HyAgent/1.0' },
       signal: AbortSignal.timeout(10000),
     })
     if (response.ok) {
@@ -187,7 +187,7 @@ export function createApp(config: { current: Config; suggestions: ConfigSuggesti
   }))
 
   app.get('/api/info', c => c.json({
-    name: 'Hybrid Agent',
+    name: 'HyAgent',
     version: '0.1.0',
     config: { provider: cfg.provider, model: cfg.model, hasApiKey: !!cfg.apiKey },
   }))

@@ -25,7 +25,7 @@ export const PluginManifestSchema = z.object({
   version: z.string(),
   description: z.string().optional(),
   main: z.string().optional(),
-  hybridAgent: z.object({
+  hyagent: z.object({
     tools: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
   }).optional(),

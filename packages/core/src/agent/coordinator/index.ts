@@ -242,7 +242,7 @@ export interface CoordinatorService {
 /**
  * Coordinator service tag for Effect context
  */
-export const CoordinatorServiceTag = Context.GenericTag<CoordinatorService>('@hybrid-agent/coordinator')
+export const CoordinatorServiceTag = Context.GenericTag<CoordinatorService>('@hyagent/coordinator')
 
 /**
  * Create Coordinator Service layer

@@ -1,6 +1,6 @@
 import { createStore } from 'solid-js/store'
-import type { AgentStreamEvent, AgentResult } from '@hybrid-agent/core'
-import type { AgentConfig } from '@hybrid-agent/core'
+import type { AgentStreamEvent, AgentResult } from '@hyagent/core'
+import type { AgentConfig } from '@hyagent/core'
 
 export interface Message {
   id: string

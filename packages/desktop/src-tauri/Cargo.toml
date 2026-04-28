@@ -1,12 +1,12 @@
 [package]
-name = "hybrid-agent-desktop"
+name = "hyagent-desktop"
 version = "0.1.0"
-description = "Hybrid Agent Desktop Application"
+description = "HyAgent Desktop Application"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "hybrid_agent_desktop_lib"
+name = "hyagent_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

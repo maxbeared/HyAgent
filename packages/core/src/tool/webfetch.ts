@@ -99,7 +99,7 @@ export interface WebFetchMetadata {
 export async function defaultWebFetch(url: string, maxLength: number = 10000): Promise<WebFetchResult> {
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; Hybrid-Agent/1.0)',
+      'User-Agent': 'Mozilla/5.0 (compatible; HyAgent/1.0)',
       'Accept': 'text/html,application/xhtml+xml',
     },
   })

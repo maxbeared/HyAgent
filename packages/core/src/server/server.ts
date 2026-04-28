@@ -143,7 +143,7 @@ export interface ServerService {
 /**
  * Server service tag for Effect context
  */
-export const ServerService = Context.GenericTag<ServerService>('@hybrid-agent/server')
+export const ServerService = Context.GenericTag<ServerService>('@hyagent/server')
 
 /**
  * Create Server Service layer

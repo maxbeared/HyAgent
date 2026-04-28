@@ -31,7 +31,7 @@ export interface ProviderRegistry {
 /**
  * Provider registry tag
  */
-export const ProviderRegistryTag = Context.GenericTag<ProviderRegistry>('@hybrid-agent/provider-registry')
+export const ProviderRegistryTag = Context.GenericTag<ProviderRegistry>('@hyagent/provider-registry')
 
 /**
  * Create Provider Registry layer
@@ -307,7 +307,7 @@ export interface ProviderService {
 /**
  * Provider service tag for Effect context
  */
-export const ProviderServiceTag = Context.GenericTag<ProviderService>('@hybrid-agent/provider')
+export const ProviderServiceTag = Context.GenericTag<ProviderService>('@hyagent/provider')
 
 /**
  * Create Provider Service layer

@@ -2,7 +2,7 @@
  * MCP OAuth Authentication
  *
  * Provides OAuth 1.0a / OAuth 2.0 support for MCP servers that require authentication.
- * Tokens are persisted to ~/.hybrid-agent/mcp-auth.json
+ * Tokens are persisted to ~/.hyagent/mcp-auth.json
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
@@ -41,7 +41,7 @@ export interface AuthStatus {
 // Auth Storage
 // ============================================================================
 
-const AUTH_FILE_PATH = join(homedir(), '.hybrid-agent', 'mcp-auth.json')
+const AUTH_FILE_PATH = join(homedir(), '.hyagent', 'mcp-auth.json')
 
 function ensureAuthDir(): void {
   const dir = dirname(AUTH_FILE_PATH)
@@ -153,7 +153,7 @@ export class McpOAuthProvider {
   private generateAuthUrl(): string | undefined {
     // For OAuth 2.0 servers, generate the authorization URL
     // This is server-specific and would need to be configured
-    const clientId = 'hybrid-agent'
+    const clientId = 'hyagent'
     const redirectUri = 'http://localhost:19876/callback'
 
     // Check if server config has OAuth settings

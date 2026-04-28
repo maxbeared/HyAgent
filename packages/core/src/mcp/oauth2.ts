@@ -43,7 +43,7 @@ export type OAuth2Token = z.infer<typeof OAuth2TokenSchema>
 // ============================================================================
 
 export const DynamicRegistrationRequestSchema = z.object({
-  clientName: z.string().default('Hybrid Agent MCP'),
+  clientName: z.string().default('HyAgent MCP'),
   redirectUris: z.array(z.string()),
   grantTypes: z.array(z.enum(['authorization_code', 'refresh_token'])).optional(),
   responseTypes: z.array(z.enum(['code'])).optional(),
@@ -67,7 +67,7 @@ export type DynamicRegistrationResponse = z.infer<typeof DynamicRegistrationResp
 // OAuth 2.0 Provider
 // ============================================================================
 
-const OAUTH2_CLIENT_STORE_PATH = join(homedir(), '.hybrid-agent', 'mcp-oauth2-clients.json')
+const OAUTH2_CLIENT_STORE_PATH = join(homedir(), '.hyagent', 'mcp-oauth2-clients.json')
 
 function ensureOAuth2Dir(): void {
   const dir = dirname(OAUTH2_CLIENT_STORE_PATH)
@@ -355,7 +355,7 @@ export class OAuth2Manager {
   ): Promise<OAuth2Client> {
     const provider = this.getProvider(serverUrl)
     const fullRequest: DynamicRegistrationRequest = {
-      clientName: request?.clientName || 'Hybrid Agent MCP',
+      clientName: request?.clientName || 'HyAgent MCP',
       redirectUris: request?.redirectUris || ['http://localhost:19876/callback'],
       tokenEndpointAuthMethod: request?.tokenEndpointAuthMethod || 'client_secret_basic',
       scope: request?.scope,

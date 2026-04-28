@@ -1,5 +1,5 @@
 import { Message } from '@anthropic-ai/sdk'
-import type { AgentStreamEvent, AgentConfig } from '@hybrid-agent/core'
+import type { AgentStreamEvent, AgentConfig } from '@hyagent/core'
 
 export interface Session {
   id: string
@@ -17,7 +17,7 @@ export interface AgentState {
 }
 
 /**
- * Agent Service - 集成 @hybrid-agent/core 的核心功能
+ * Agent Service - 集成 @hyagent/core 的核心功能
  *
  * 真实实现需要:
  * 1. 配置 API Provider (Anthropic/OpenAI/MiniMax)
@@ -48,7 +48,7 @@ export class AgentService {
 
   /**
    * 核心对话方法 - 模拟真实 API 调用
-   * 在实际实现中，这里会调用 @hybrid-agent/core 的 runAgentLoopStream
+   * 在实际实现中，这里会调用 @hyagent/core 的 runAgentLoopStream
    */
   async *streamChat(
     sessionId: string,
@@ -133,7 +133,7 @@ export class AgentService {
 请告诉我需要操作哪个文件或执行什么任务。`
     }
 
-    return `感谢您的消息！作为 Hybrid Agent，我可以帮助您:
+    return `感谢您的消息！作为 HyAgent，我可以帮助您:
 
 • 编写和调试代码
 • 分析和解释代码

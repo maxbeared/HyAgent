@@ -19,7 +19,7 @@ interface TerminalLine {
 export const TerminalPanel: Component = () => {
   const { t } = useI18n()
   const [tabs, setTabs] = createSignal<TerminalTab[]>([
-    { id: '1', title: 'Terminal 1', cwd: 'd:\\agent-core-compare\\hybrid-agent' }
+    { id: '1', title: 'Terminal 1', cwd: 'd:\\agent-core-compare\\hyagent' }
   ])
   const [activeTabId, setActiveTabId] = createSignal('1')
   const [lines, setLines] = createSignal<Record<string, TerminalLine[]>>({

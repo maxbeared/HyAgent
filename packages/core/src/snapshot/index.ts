@@ -169,7 +169,7 @@ export function resetPatchState(): void {
 // Snapshot Storage
 // ============================================================================
 
-const SNAPSHOT_DIR = join(homedir(), '.hybrid-agent', 'snapshots')
+const SNAPSHOT_DIR = join(homedir(), '.hyagent', 'snapshots')
 
 function ensureSnapshotDir(): void {
   if (!existsSync(SNAPSHOT_DIR)) {
@@ -188,8 +188,8 @@ function ensureGitRepo(): void {
   ensureSnapshotDir()
   if (!existsSync(join(SNAPSHOT_DIR, '.git'))) {
     execSync('git init', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
-    execSync('git config user.email "hybrid-agent@snapshot"', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
-    execSync('git config user.name "Hybrid Agent"', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
+    execSync('git config user.email "hyagent@snapshot"', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
+    execSync('git config user.name "HyAgent"', { cwd: SNAPSHOT_DIR, stdio: 'ignore' })
   }
 }
 

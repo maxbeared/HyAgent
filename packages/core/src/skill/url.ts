@@ -50,7 +50,7 @@ export interface FetchResult {
 // URL Cache
 // ============================================================================
 
-const SKILL_URL_CACHE_DIR = join(homedir(), '.hybrid-agent', 'skill-cache')
+const SKILL_URL_CACHE_DIR = join(homedir(), '.hyagent', 'skill-cache')
 
 function ensureCacheDir(): void {
   if (!existsSync(SKILL_URL_CACHE_DIR)) {

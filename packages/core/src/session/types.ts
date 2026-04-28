@@ -150,7 +150,7 @@ export interface ForkResult {
 /**
  * Session service tag for Effect context
  */
-export const SessionServiceTag = Context.GenericTag<SessionService>('@hybrid-agent/session')
+export const SessionServiceTag = Context.GenericTag<SessionService>('@hyagent/session')
 
 // ============================================================================
 // Token Budget Types (来自Claude Code)
