@@ -33,6 +33,32 @@
   -webkit-app-region: no-drag;
 }
 
+.workspace-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.workspace-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.workspace-tab:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.workspace-tab.active {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
 .title-bar-right {
   display: flex;
   align-items: center;
@@ -113,9 +139,9 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
-/* Tab Bar (Simple Mode) */
 .tab-bar {
   display: flex;
   align-items: center;
@@ -207,12 +233,101 @@
   background: var(--bg-primary);
 }
 
-/* Panel Grid (Pro Mode) */
-.panel-grid {
-  display: grid;
+/* Pro Layout */
+.pro-layout {
+  display: flex;
   flex: 1;
   overflow: hidden;
-  gap: 0;
+  min-height: 0;
+}
+
+/* Workspace Grid */
+.workspace-grid {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  gap: 3px;
+  padding: 3px;
+  box-sizing: border-box;
+}
+
+.workspace-cell {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.workspace-header:hover {
+  background: var(--bg-secondary);
+}
+
+.workspace-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.workspace-toggle {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.workspace-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.workspace-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.workspace-action-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.workspace-action-btn:hover {
+  color: var(--accent-primary);
+}
+
+/* Panel Grid within workspace */
+.panel-grid {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg-primary);
 }
 
@@ -221,15 +336,16 @@
   flex-direction: column;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  margin: 4px;
-  min-width: 200px;
-  min-height: 150px;
-  position: relative;
   overflow: hidden;
 }
 
 .panel-cell:hover {
   border-color: var(--accent-primary);
+}
+
+.panel-cell.drag-over {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 2px var(--accent-primary);
 }
 
 .panel-cell.active {
@@ -311,7 +427,7 @@
   overflow: hidden;
 }
 
-/* Resize handles */
+/* Panel resize handles */
 .panel-resize-handle {
   position: absolute;
   background: transparent;
@@ -334,86 +450,220 @@
   cursor: ns-resize;
 }
 
+.panel-resize-handle.resize-corner {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
 .panel-resize-handle.resize-right:hover,
-.panel-resize-handle.resize-bottom:hover {
+.panel-resize-handle.resize-bottom:hover,
+.panel-resize-handle.resize-corner:hover {
   background: var(--accent-primary);
 }
 
-/* Pro Layout */
-.pro-layout {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
+.panel-cell.resizing {
+  opacity: 0.9;
 }
 
-.pro-sidebar {
-  width: 180px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
+.panel-cell.dragging {
+  opacity: 0.7;
+  cursor: move !important;
 }
 
-.sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 40px;
-  padding: 0 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--fs-base);
+.panel-cell-header {
+  cursor: move;
 }
 
-.sidebar-item:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+.panel-cell-tab[draggable="true"] {
+  cursor: grab;
 }
 
-.sidebar-item.active {
-  background: var(--bg-tertiary);
-  color: var(--accent-primary);
-  border-left: 2px solid var(--accent-primary);
+.panel-cell-tab[draggable="true"]:active {
+  cursor: grabbing;
 }
 
-.sidebar-icon {
-  display: flex;
-  align-items: center;
+.panel-cell-actions .close-btn:hover {
+  color: var(--accent-danger);
 }
 
-.sidebar-actions {
-  margin-top: auto;
+/* Grid resize handles for workspace grid */
+.workspace-grid-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.workspace-grid-handle {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.workspace-grid-handle.row-handle {
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  margin-top: -3px;
+}
+
+.workspace-grid-handle.row-handle:hover {
+  background: var(--accent-primary);
+}
+
+.workspace-grid-handle.col-handle {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  margin-left: -3px;
+}
+
+.workspace-grid-handle.col-handle:hover {
+  background: var(--accent-primary);
+}
+
+/* Grid resize handles for panel grid */
+.panel-grid-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.panel-grid-handle {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.panel-grid-handle.row-handle {
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+  margin-top: -2px;
+}
+
+.panel-grid-handle.row-handle:hover {
+  background: var(--accent-primary);
+  opacity: 0.7;
+}
+
+.panel-grid-handle.col-handle {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  margin-left: -2px;
+}
+
+.panel-grid-handle.col-handle:hover {
+  background: var(--accent-primary);
+  opacity: 0.7;
+}
+
+.status-grid-controls {
   display: flex;
   gap: 4px;
-  padding: 8px;
-  border-top: 1px solid var(--border-color);
+  margin-left: auto;
+  align-items: center;
 }
 
-.sidebar-action {
-  flex: 1;
-  height: 28px;
+.grid-btn {
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.grid-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.grid-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.grid-info {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Empty cell placeholder */
+.empty-cell {
+  position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
   cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 1;
+  box-sizing: border-box;
 }
 
-.sidebar-action:hover {
-  background: var(--bg-tertiary);
+.empty-cell:hover {
+  border-color: var(--accent-primary);
+  background: rgba(253, 113, 4, 0.08);
+}
+
+.empty-cell-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.empty-cell:hover .empty-cell-content {
   color: var(--accent-primary);
 }
 
-.pro-content {
-  flex: 1;
-  overflow: hidden;
+/* Add menu popup */
+.add-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 4px;
+  min-width: 140px;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-.pro-panel {
-  height: 100%;
-  background: var(--bg-primary);
+.add-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  cursor: pointer;
+}
+
+.add-menu button:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
 }
 
 .context-menu {
