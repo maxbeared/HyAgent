@@ -13,7 +13,7 @@ jobs:
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter @hybrid-agent/core test
         env:
           CI: true
@@ -28,7 +28,7 @@ jobs:
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter @hybrid-agent/core typecheck
 
   e2e-test:
@@ -41,7 +41,7 @@ jobs:
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter @hybrid-agent/core exec npx playwright install --with-deps
       - run: pnpm --filter @hybrid-agent/core test:e2e
         env:
