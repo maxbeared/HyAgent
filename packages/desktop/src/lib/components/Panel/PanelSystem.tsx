@@ -226,13 +226,23 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     const gridRect = workspaceGridRef?.getBoundingClientRect()
     if (!gridRect) return
 
+    const padding = 3
+    const gap = 3
+    const { rows, cols, rowWeights, colWeights } = props.layout.layout.workspaceGrid
+    const totalRowWeight = rowWeights.reduce((a, b) => a + b, 0)
+    const totalColWeight = colWeights.reduce((a, b) => a + b, 0)
+    // Available space for fr units (excluding padding and gaps)
+    const contentHeight = gridRect.height - padding * 2 - gap * (rows - 1)
+    const contentWidth = gridRect.width - padding * 2 - gap * (cols - 1)
+
     // Workspace row resize
     const rowState = resizingWorkspaceRow()
     if (rowState) {
       const delta = e.clientY - rowState.startY
-      props.layout.resizeRowHeight(rowState.index, delta, gridRect.height)
+      props.layout.resizeRowHeight(rowState.index, delta, contentHeight, totalRowWeight)
       // Update startY so next delta is relative to new position
       setResizingWorkspaceRow({ ...rowState, startY: e.clientY })
+      updateHandlePositions()
       return
     }
 
@@ -240,9 +250,10 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     const colState = resizingWorkspaceCol()
     if (colState) {
       const delta = e.clientX - colState.startX
-      props.layout.resizeColWidth(colState.index, delta, gridRect.width)
+      props.layout.resizeColWidth(colState.index, delta, contentWidth, totalColWeight)
       // Update startX so next delta is relative to new position
       setResizingWorkspaceCol({ ...colState, startX: e.clientX })
+      updateHandlePositions()
       return
     }
   }
@@ -250,6 +261,7 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
   const handleMouseUp = () => {
     setResizingWorkspaceRow(null)
     setResizingWorkspaceCol(null)
+    updateHandlePositions()
   }
 
   onMount(() => {
@@ -257,7 +269,7 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     document.addEventListener('mouseup', handleMouseUp)
     window.addEventListener('resize', handleWindowResize)
     // Initial calculation after layout settles
-    setTimeout(handleWindowResize, 100)
+    setTimeout(updateHandlePositions, 100)
   })
 
   onCleanup(() => {
@@ -292,36 +304,91 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     }
   }
 
-  // Get actual pixel sizes from weights
-  const getRowHeights = () => {
-    const size = containerSize()
-    if (size.height === 0) {
-      // Initial render, use default
-      return props.layout.layout.workspaceGrid.rowWeights.map(() => 200)
+  // Get handle positions by finding actual gap positions between cells
+  const getHandlePositions = () => {
+    if (!workspaceGridRef) return { rows: [], cols: [] }
+
+    const gridRect = workspaceGridRef.getBoundingClientRect()
+    if (gridRect.width === 0 || gridRect.height === 0) return { rows: [], cols: [] }
+
+    const { rows, cols } = props.layout.layout.workspaceGrid
+    const gap = 3
+    const padding = 3
+
+    // Calculate actual pixel positions from weights (matching the grid rendering logic)
+    const { rowWeights, colWeights } = props.layout.layout.workspaceGrid
+    const totalRowWeight = rowWeights.reduce((a, b) => a + b, 0)
+    const totalColWeight = colWeights.reduce((a, b) => a + b, 0)
+
+    // Available space after padding and gaps
+    const availHeight = gridRect.height - padding * 2 - gap * (rows - 1)
+    const availWidth = gridRect.width - padding * 2 - gap * (cols - 1)
+
+    const rowPositions: number[] = []
+    let accumulatedHeight = padding
+    for (let r = 0; r < rows - 1; r++) {
+      const rowHeight = availHeight * (rowWeights[r] / totalRowWeight)
+      accumulatedHeight += rowHeight + gap
+      rowPositions.push(accumulatedHeight - gap / 2)
     }
-    return props.layout.getRowHeights(size.height)
+
+    const colPositions: number[] = []
+    let accumulatedWidth = padding
+    for (let c = 0; c < cols - 1; c++) {
+      const colWidth = availWidth * (colWeights[c] / totalColWeight)
+      accumulatedWidth += colWidth + gap
+      colPositions.push(accumulatedWidth - gap / 2)
+    }
+
+    return { rows: rowPositions, cols: colPositions }
   }
 
-  const getColWidths = () => {
-    const size = containerSize()
-    if (size.width === 0) {
-      // Initial render, use default
-      return props.layout.layout.workspaceGrid.colWeights.map(() => 300)
-    }
-    return props.layout.getColWidths(size.width)
+  const [handlePositions, setHandlePositions] = createSignal({ rows: [] as number[], cols: [] as number[] })
+
+  const updateHandlePositions = () => {
+    requestAnimationFrame(() => {
+      setHandlePositions(getHandlePositions())
+    })
   }
 
   // Handle window resize - update container size
   const handleWindowResize = () => {
-    const gridRect = workspaceGridRef?.getBoundingClientRect()
-    if (gridRect) {
-      setContainerSize({ width: gridRect.width, height: gridRect.height })
-    }
+    updateHandlePositions()
   }
 
   // Get grid area for workspace to support spanning multiple cells
   const getWorkspaceGridArea = (ws: typeof props.layout.layout.workspaces[0]) => {
     return `${ws.position.row + 1} / ${ws.position.col + 1} / span ${ws.position.rowSpan} / span ${ws.position.colSpan}`
+  }
+
+  // Calculate empty cells (not occupied by any workspace)
+  const getEmptyCells = () => {
+    const { rows, cols } = props.layout.layout.workspaceGrid
+    const occupied = new Set<string>()
+
+    // Mark all cells occupied by workspaces
+    props.layout.layout.workspaces.forEach(ws => {
+      for (let r = ws.position.row; r < ws.position.row + ws.position.rowSpan; r++) {
+        for (let c = ws.position.col; c < ws.position.col + ws.position.colSpan; c++) {
+          occupied.add(`${r}-${c}`)
+        }
+      }
+    })
+
+    // Find empty cells
+    const empty: Array<{ row: number; col: number }> = []
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!occupied.has(`${r}-${c}`)) {
+          empty.push({ row: r, col: c })
+        }
+      }
+    }
+    return empty
+  }
+
+  const getEmptyCellGridArea = (cell: { row: number; col: number }) => {
+    return `${cell.row + 1} / ${cell.col + 1} / span 1 / span 1`
   }
 
   return (
@@ -333,29 +400,41 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
       >
         {/* Workspace grid resize handles */}
         <div class="workspace-grid-handles">
-          <For each={getRowHeights()}>
-            {(_, i) => (
-              <Show when={i() < getRowHeights().length - 1}>
-                <div
-                  class="workspace-grid-handle row-handle"
-                  style={{ top: `${getRowHeights().slice(0, i() + 1).reduce((a, b) => a + b, 0)}px` }}
-                  onMouseDown={(e) => handleWorkspaceRowResizeStart(e, i())}
-                />
-              </Show>
+          <For each={handlePositions().rows}>
+            {(top, i) => (
+              <div
+                class="workspace-grid-handle row-handle"
+                style={{ top: `${top}px` }}
+                onMouseDown={(e) => handleWorkspaceRowResizeStart(e, i())}
+              />
             )}
           </For>
-          <For each={getColWidths()}>
-            {(_, i) => (
-              <Show when={i() < getColWidths().length - 1}>
-                <div
-                  class="workspace-grid-handle col-handle"
-                  style={{ left: `${getColWidths().slice(0, i() + 1).reduce((a, b) => a + b, 0)}px` }}
-                  onMouseDown={(e) => handleWorkspaceColResizeStart(e, i())}
-                />
-              </Show>
+          <For each={handlePositions().cols}>
+            {(left, i) => (
+              <div
+                class="workspace-grid-handle col-handle"
+                style={{ left: `${left}px` }}
+                onMouseDown={(e) => handleWorkspaceColResizeStart(e, i())}
+              />
             )}
           </For>
         </div>
+
+        {/* Empty cell placeholders */}
+        <For each={getEmptyCells()}>
+          {(cell) => (
+            <div
+              class="workspace-empty-cell"
+              style={{ 'grid-area': getEmptyCellGridArea(cell) }}
+              onClick={() => props.layout.addWorkspace()}
+            >
+              <div class="workspace-empty-content">
+                <PlusIcon size={24} />
+                <span>New Workspace</span>
+              </div>
+            </div>
+          )}
+        </For>
 
         {/* Workspaces */}
         <For each={props.layout.layout.workspaces}>
@@ -370,8 +449,19 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
                     <FolderIcon size={14} />
                     <span>{workspace.title}</span>
                   </div>
-                  <div class="workspace-toggle">
-                    <ChevronDownIcon size={14} />
+                  <div class="workspace-actions">
+                    <Show when={props.layout.layout.workspaces.length > 1}>
+                      <button
+                        class="workspace-action-btn"
+                        onClick={() => props.layout.removeWorkspace(workspace.id)}
+                        title="Remove workspace"
+                      >
+                        <CloseIcon size={14} />
+                      </button>
+                    </Show>
+                    <div class="workspace-toggle">
+                      <ChevronDownIcon size={14} />
+                    </div>
                   </div>
                 </div>
 

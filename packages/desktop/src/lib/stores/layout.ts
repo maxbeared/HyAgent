@@ -497,11 +497,10 @@ export function useLayout() {
     },
 
     // Grid line resize (workspace-level) - updates weights proportionally
-    resizeRowHeight(rowIndex: number, delta: number, containerHeight: number) {
+    resizeRowHeight(rowIndex: number, delta: number, availHeight: number, totalRowWeight: number) {
       const { rowWeights, rows } = layout.workspaceGrid
-      // Calculate current pixel sizes from weights
-      const totalWeight = rowWeights.reduce((a, b) => a + b, 0)
-      const currentHeights = rowWeights.map(w => containerHeight * w / totalWeight)
+      // Calculate current pixel sizes from weights (availHeight is the space for fr units, excluding gaps/padding)
+      const currentHeights = rowWeights.map(w => availHeight * w / totalRowWeight)
 
       // Adjust the heights
       const adjustedHeights = [...currentHeights]
@@ -513,17 +512,16 @@ export function useLayout() {
 
       // Convert back to weights
       const totalAdjusted = adjustedHeights.reduce((a, b) => a + b, 0)
-      const newWeights = adjustedHeights.map(h => h / totalAdjusted * totalWeight)
+      const newWeights = adjustedHeights.map(h => h / totalAdjusted * totalRowWeight)
 
       setLayout('workspaceGrid', 'rowWeights', newWeights)
       persist()
     },
 
-    resizeColWidth(colIndex: number, delta: number, containerWidth: number) {
+    resizeColWidth(colIndex: number, delta: number, availWidth: number, totalColWeight: number) {
       const { colWeights, cols } = layout.workspaceGrid
-      // Calculate current pixel sizes from weights
-      const totalWeight = colWeights.reduce((a, b) => a + b, 0)
-      const currentWidths = colWeights.map(w => containerWidth * w / totalWeight)
+      // Calculate current pixel sizes from weights (availWidth is the space for fr units, excluding gaps/padding)
+      const currentWidths = colWeights.map(w => availWidth * w / totalColWeight)
 
       // Adjust the widths
       const adjustedWidths = [...currentWidths]
@@ -535,7 +533,7 @@ export function useLayout() {
 
       // Convert back to weights
       const totalAdjusted = adjustedWidths.reduce((a, b) => a + b, 0)
-      const newWeights = adjustedWidths.map(w => w / totalAdjusted * totalWeight)
+      const newWeights = adjustedWidths.map(w => w / totalAdjusted * totalColWeight)
 
       setLayout('workspaceGrid', 'colWeights', newWeights)
       persist()
@@ -633,14 +631,46 @@ export function useLayout() {
 
     // Workspace CRUD
     addWorkspace() {
-      const newId = createWorkspaceId()
-      const newPosition = {
-        row: Math.floor(layout.workspaces.length / layout.workspaceGrid.cols),
-        col: layout.workspaces.length % layout.workspaceGrid.cols,
-        rowSpan: 1,
-        colSpan: 1,
+      // Find first empty cell in the grid
+      const { rows, cols } = layout.workspaceGrid
+      const occupied = new Set<string>()
+
+      layout.workspaces.forEach(ws => {
+        for (let r = ws.position.row; r < ws.position.row + ws.position.rowSpan; r++) {
+          for (let c = ws.position.col; c < ws.position.col + ws.position.colSpan; c++) {
+            occupied.add(`${r}-${c}`)
+          }
+        }
+      })
+
+      let newPosition = { row: 0, col: 0, rowSpan: 1, colSpan: 1 }
+      let found = false
+      for (let r = 0; r < rows && !found; r++) {
+        for (let c = 0; c < cols && !found; c++) {
+          if (!occupied.has(`${r}-${c}`)) {
+            newPosition = { row: r, col: c, rowSpan: 1, colSpan: 1 }
+            found = true
+          }
+        }
       }
 
+      // If no empty cell, expand the grid
+      if (!found) {
+        const newRow = Math.floor(layout.workspaces.length / cols)
+        const newCol = layout.workspaces.length % cols
+        newPosition = { row: newRow, col: newCol, rowSpan: 1, colSpan: 1 }
+
+        if (newPosition.row >= rows) {
+          setLayout('workspaceGrid', 'rows', newPosition.row + 1)
+          setLayout('workspaceGrid', 'rowWeights', [...layout.workspaceGrid.rowWeights, 1])
+        }
+        if (newPosition.col >= cols) {
+          setLayout('workspaceGrid', 'cols', newPosition.col + 1)
+          setLayout('workspaceGrid', 'colWeights', [...layout.workspaceGrid.colWeights, 1])
+        }
+      }
+
+      const newId = createWorkspaceId()
       setLayout('workspaces', (workspaces) => [...workspaces, {
         id: newId,
         title: `Workspace ${workspaces.length + 1}`,
@@ -651,18 +681,6 @@ export function useLayout() {
         collapsed: false,
         panels: [],
       }])
-
-      // Expand grid if needed
-      if (newPosition.row >= layout.workspaceGrid.rows || newPosition.col >= layout.workspaceGrid.cols) {
-        if (newPosition.row >= layout.workspaceGrid.rows) {
-          setLayout('workspaceGrid', 'rows', newPosition.row + 1)
-          setLayout('workspaceGrid', 'rowHeights', [...layout.workspaceGrid.rowHeights, DEFAULT_WORKSPACE_HEIGHT])
-        }
-        if (newPosition.col >= layout.workspaceGrid.cols) {
-          setLayout('workspaceGrid', 'cols', newPosition.col + 1)
-          setLayout('workspaceGrid', 'colWidths', [...layout.workspaceGrid.colWidths, DEFAULT_WORKSPACE_WIDTH])
-        }
-      }
 
       setLayout('activeWorkspaceId', newId)
       persist()

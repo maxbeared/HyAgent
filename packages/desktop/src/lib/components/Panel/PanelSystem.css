@@ -301,6 +301,42 @@
   position: relative;
 }
 
+/* Empty cell placeholder for creating new workspace */
+.workspace-empty-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.workspace-empty-cell:hover {
+  border-color: var(--accent-primary);
+  background: rgba(253, 113, 4, 0.08);
+}
+
+.workspace-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.workspace-empty-cell:hover .workspace-empty-content {
+  color: var(--accent-primary);
+}
+
+.workspace-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
 .workspace-actions {
   display: flex;
   gap: 4px;
@@ -503,30 +539,56 @@
 .workspace-grid-handle {
   position: absolute;
   pointer-events: auto;
+  background: transparent;
+  transition: background 0.15s;
 }
 
 .workspace-grid-handle.row-handle {
   left: 0;
   right: 0;
   height: 6px;
-  cursor: ns-resize;
   margin-top: -3px;
+  cursor: ns-resize;
 }
 
-.workspace-grid-handle.row-handle:hover {
+.workspace-grid-handle.row-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 2px;
   background: var(--accent-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.workspace-grid-handle.row-handle:hover::after {
+  opacity: 0.7;
 }
 
 .workspace-grid-handle.col-handle {
   top: 0;
   bottom: 0;
   width: 6px;
-  cursor: ew-resize;
   margin-left: -3px;
+  cursor: ew-resize;
 }
 
-.workspace-grid-handle.col-handle:hover {
+.workspace-grid-handle.col-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
   background: var(--accent-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.workspace-grid-handle.col-handle:hover::after {
+  opacity: 0.7;
 }
 
 /* Grid resize handles for panel grid */
