@@ -358,6 +358,61 @@
   color: var(--accent-primary);
 }
 
+/* Workspace cell dragging states */
+.workspace-cell.ws-dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.workspace-cell.ws-drop-preview {
+  border-color: var(--accent-primary);
+  border-style: dashed;
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+/* Drop preview overlay */
+.ws-drop-overlay {
+  background: rgba(253, 113, 4, 0.15);
+  border: 2px dashed var(--accent-primary);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Workspace resize handles */
+.ws-resize-handle {
+  position: absolute;
+  z-index: 10;
+}
+
+.ws-resize-handle.ws-resize-right {
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.ws-resize-handle.ws-resize-bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.ws-resize-handle.ws-resize-corner {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
+.ws-resize-handle:hover {
+  background: var(--accent-primary);
+  opacity: 0.4;
+}
+
 /* Panel Grid within workspace */
 .panel-grid {
   position: relative;

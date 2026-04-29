@@ -784,7 +784,68 @@ export function useLayout() {
     stopResizing() {
       setResizingPanelId(null)
     },
+
+    // Workspace position/spanning operations
+    moveWorkspace(workspaceId: string, newRow: number, newCol: number) {
+      const ws = layout.workspaces.find(w => w.id === workspaceId)
+      if (!ws) return
+
+      // Check bounds
+      if (newRow < 0 || newCol < 0) return
+      if (newRow + ws.position.rowSpan > layout.workspaceGrid.rows) return
+      if (newCol + ws.position.colSpan > layout.workspaceGrid.cols) return
+
+      // Check overlap
+      if (hasOverlapInWorkspaceForWorkspaces(workspaceId, newRow, newCol, ws.position.rowSpan, ws.position.colSpan)) return
+
+      setLayout('workspaces', w => w.id === workspaceId, 'position', {
+        row: newRow,
+        col: newCol,
+        rowSpan: ws.position.rowSpan,
+        colSpan: ws.position.colSpan,
+      })
+      persist()
+    },
+
+    resizeWorkspace(workspaceId: string, newRowSpan: number, newColSpan: number) {
+      const ws = layout.workspaces.find(w => w.id === workspaceId)
+      if (!ws) return
+
+      // Validate bounds
+      newRowSpan = Math.max(1, newRowSpan)
+      newColSpan = Math.max(1, newColSpan)
+      newRowSpan = Math.min(newRowSpan, layout.workspaceGrid.rows - ws.position.row)
+      newColSpan = Math.min(newColSpan, layout.workspaceGrid.cols - ws.position.col)
+
+      // Check overlap
+      if (hasOverlapInWorkspaceForWorkspaces(workspaceId, ws.position.row, ws.position.col, newRowSpan, newColSpan)) return
+
+      setLayout('workspaces', w => w.id === workspaceId, 'position', {
+        row: ws.position.row,
+        col: ws.position.col,
+        rowSpan: newRowSpan,
+        colSpan: newColSpan,
+      })
+      persist()
+    },
   }
+}
+
+// Helper function to check overlap for workspace grid (separate from panel grid overlap)
+function hasOverlapInWorkspaceForWorkspaces(excludeWsId: string, row: number, col: number, rowSpan: number, colSpan: number): boolean {
+  for (const ws of layout.workspaces) {
+    if (ws.id === excludeWsId) continue
+
+    const wsRowEnd = ws.position.row + ws.position.rowSpan
+    const wsColEnd = ws.position.col + ws.position.colSpan
+    const targetRowEnd = row + rowSpan
+    const targetColEnd = col + colSpan
+
+    if (row < wsRowEnd && targetRowEnd > ws.position.row && col < wsColEnd && targetColEnd > ws.position.col) {
+      return true
+    }
+  }
+  return false
 }
 
 export function getDefaultLayout(mode: 'simple' | 'pro'): WorkspaceConfig[] {

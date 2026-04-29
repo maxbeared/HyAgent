@@ -221,6 +221,205 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
   const [resizingWorkspaceRow, setResizingWorkspaceRow] = createSignal<{ index: number; startY: number } | null>(null)
   const [resizingWorkspaceCol, setResizingWorkspaceCol] = createSignal<{ index: number; startX: number } | null>(null)
 
+  // Workspace drag state
+  const [draggingWorkspace, setDraggingWorkspace] = createSignal<{
+    id: string
+    startX: number
+    startY: number
+    startRow: number
+    startCol: number
+    startRowSpan: number
+    startColSpan: number
+  } | null>(null)
+
+  // Drop preview state
+  const [dropPreview, setDropPreview] = createSignal<{ row: number; col: number; rowSpan: number; colSpan: number } | null>(null)
+
+  // Calculate grid cell dimensions - pixel-accurate based on weights
+  const getCellDimensions = () => {
+    if (!workspaceGridRef) return { rowHeights: [] as number[], colWidths: [] as number[], padding: 3, gap: 3 }
+    const gridRect = workspaceGridRef.getBoundingClientRect()
+    const { rows, cols, rowWeights, colWeights } = props.layout.layout.workspaceGrid
+    const totalRowWeight = rowWeights.reduce((a, b) => a + b, 0)
+    const totalColWeight = colWeights.reduce((a, b) => a + b, 0)
+
+    const padding = 3
+    const gap = 3
+    const availHeight = gridRect.height - padding * 2 - gap * (rows - 1)
+    const availWidth = gridRect.width - padding * 2 - gap * (cols - 1)
+
+    // Calculate each row/col height/width based on weights
+    const rowHeights = rowWeights.map(w => availHeight * w / totalRowWeight)
+    const colWidths = colWeights.map(w => availWidth * w / totalColWeight)
+
+    return { rowHeights, colWidths, padding, gap }
+  }
+
+  // Get the starting pixel position of a row
+  const getRowStartY = (rowIndex: number) => {
+    const { rowHeights, padding, gap } = getCellDimensions()
+    let y = padding
+    for (let r = 0; r < rowIndex; r++) {
+      y += rowHeights[r] + gap
+    }
+    return y
+  }
+
+  // Get the starting pixel position of a column
+  const getColStartX = (colIndex: number) => {
+    const { colWidths, padding, gap } = getCellDimensions()
+    let x = padding
+    for (let c = 0; c < colIndex; c++) {
+      x += colWidths[c] + gap
+    }
+    return x
+  }
+
+  // Get pixel position from grid coordinates
+  const gridPosToPixels = (row: number, col: number, rowSpan: number, colSpan: number) => {
+    const { rowHeights, colWidths, padding, gap } = getCellDimensions()
+
+    let top = padding
+    for (let r = 0; r < row; r++) {
+      top += rowHeights[r] + gap
+    }
+
+    let left = padding
+    for (let c = 0; c < col; c++) {
+      left += colWidths[c] + gap
+    }
+
+    let height = 0
+    for (let r = row; r < row + rowSpan; r++) {
+      height += rowHeights[r] + (r < row + rowSpan - 1 ? gap : 0)
+    }
+
+    let width = 0
+    for (let c = col; c < col + colSpan; c++) {
+      width += colWidths[c] + (c < col + colSpan - 1 ? gap : 0)
+    }
+
+    return { top, left, width, height }
+  }
+
+  // Get grid coordinates from pixel position (for drop target calculation)
+  const pixelsToGridPos = (clientX: number, clientY: number, rowSpan: number, colSpan: number) => {
+    if (!workspaceGridRef) return null
+    const gridRect = workspaceGridRef.getBoundingClientRect()
+    const { rows, cols, rowWeights, colWeights } = props.layout.layout.workspaceGrid
+    const totalRowWeight = rowWeights.reduce((a, b) => a + b, 0)
+    const totalColWeight = colWeights.reduce((a, b) => a + b, 0)
+
+    const padding = 3
+    const gap = 3
+    const availHeight = gridRect.height - padding * 2 - gap * (rows - 1)
+    const availWidth = gridRect.width - padding * 2 - gap * (cols - 1)
+
+    const rowHeights = rowWeights.map(w => availHeight * w / totalRowWeight)
+    const colWidths = colWeights.map(w => availWidth * w / totalColWeight)
+
+    // Find which row/col the mouse is in
+    const relX = clientX - gridRect.left
+    const relY = clientY - gridRect.top
+
+    let accumulated = padding
+    let col = cols - 1
+    for (let c = 0; c < cols; c++) {
+      const nextAccumulated = accumulated + colWidths[c]
+      if (relX < nextAccumulated + gap / 2) {
+        col = c
+        break
+      }
+      accumulated = nextAccumulated + gap
+    }
+
+    accumulated = padding
+    let row = rows - 1
+    for (let r = 0; r < rows; r++) {
+      const nextAccumulated = accumulated + rowHeights[r]
+      if (relY < nextAccumulated + gap / 2) {
+        row = r
+        break
+      }
+      accumulated = nextAccumulated + gap
+    }
+
+    // Clamp to valid range
+    col = Math.max(0, Math.min(col, cols - colSpan))
+    row = Math.max(0, Math.min(row, rows - rowSpan))
+
+    return { row, col }
+  }
+
+  // Check if a grid line handle exists nearby (to avoid conflict)
+  const hasGridLineHandleNear = (edge: 'right' | 'bottom', ws: typeof props.layout.layout.workspaces[0]) => {
+    const handlePos = handlePositions()
+    const { top, left, width, height } = gridPosToPixels(ws.position.row, ws.position.col, ws.position.rowSpan, ws.position.colSpan)
+    const threshold = 10 // px
+
+    if (edge === 'right') {
+      // Check if there's a col handle at the right edge of this workspace
+      for (const colX of handlePos.cols) {
+        if (Math.abs(colX - (left + width)) < threshold) {
+          return true
+        }
+      }
+    } else {
+      // Check if there's a row handle at the bottom edge of this workspace
+      for (const rowY of handlePos.rows) {
+        if (Math.abs(rowY - (top + height)) < threshold) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  // Get current workspace position in grid coordinates
+  const getWorkspaceGridPos = (ws: typeof props.layout.layout.workspaces[0]) => {
+    return gridPosToPixels(ws.position.row, ws.position.col, ws.position.rowSpan, ws.position.colSpan)
+  }
+
+  // Check if a position is within a workspace
+  const isPointInWorkspace = (x: number, y: number, ws: typeof props.layout.layout.workspaces[0]) => {
+    const pos = getWorkspaceGridPos(ws)
+    if (!pos) return false
+    return x >= pos.left && x <= pos.left + pos.width && y >= pos.top && y <= pos.top + pos.height
+  }
+
+  // Get drop target from mouse position
+  const getDropTarget = (x: number, y: number, excludeWsId: string) => {
+    if (!workspaceGridRef) return null
+    const { rows, cols } = props.layout.layout.workspaceGrid
+    const dragState = draggingWorkspace()
+    const rowSpan = dragState?.startRowSpan || 1
+    const colSpan = dragState?.startColSpan || 1
+
+    const result = pixelsToGridPos(x, y, rowSpan, colSpan)
+    if (!result) return null
+
+    return { ...result, rowSpan, colSpan }
+  }
+
+  // Check if a position would overlap with other workspaces
+  const wouldOverlap = (row: number, col: number, rowSpan: number, colSpan: number, excludeWsId: string) => {
+    const workspaces = props.layout.layout.workspaces
+    for (const ws of workspaces) {
+      if (ws.id === excludeWsId) continue
+
+      const wsRowEnd = ws.position.row + ws.position.rowSpan
+      const wsColEnd = ws.position.col + ws.position.colSpan
+      const targetRowEnd = row + rowSpan
+      const targetColEnd = col + colSpan
+
+      // Check overlap
+      if (row < wsRowEnd && targetRowEnd > ws.position.row && col < wsColEnd && targetColEnd > ws.position.col) {
+        return true
+      }
+    }
+    return false
+  }
+
   // Mouse move handler
   const handleMouseMove = (e: MouseEvent) => {
     const gridRect = workspaceGridRef?.getBoundingClientRect()
@@ -231,16 +430,31 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     const { rows, cols, rowWeights, colWeights } = props.layout.layout.workspaceGrid
     const totalRowWeight = rowWeights.reduce((a, b) => a + b, 0)
     const totalColWeight = colWeights.reduce((a, b) => a + b, 0)
-    // Available space for fr units (excluding padding and gaps)
     const contentHeight = gridRect.height - padding * 2 - gap * (rows - 1)
     const contentWidth = gridRect.width - padding * 2 - gap * (cols - 1)
+
+    // Workspace drag
+    const dragState = draggingWorkspace()
+    if (dragState) {
+      // Use pixel-accurate grid position calculation
+      const result = pixelsToGridPos(e.clientX, e.clientY, dragState.startRowSpan, dragState.startColSpan)
+      if (result) {
+        const newCol = result.col
+        const newRow = result.row
+
+        // Check for overlap
+        if (!wouldOverlap(newRow, newCol, dragState.startRowSpan, dragState.startColSpan, dragState.id)) {
+          setDropPreview({ row: newRow, col: newCol, rowSpan: dragState.startRowSpan, colSpan: dragState.startColSpan })
+        }
+      }
+      return
+    }
 
     // Workspace row resize
     const rowState = resizingWorkspaceRow()
     if (rowState) {
       const delta = e.clientY - rowState.startY
       props.layout.resizeRowHeight(rowState.index, delta, contentHeight, totalRowWeight)
-      // Update startY so next delta is relative to new position
       setResizingWorkspaceRow({ ...rowState, startY: e.clientY })
       updateHandlePositions()
       return
@@ -251,7 +465,6 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     if (colState) {
       const delta = e.clientX - colState.startX
       props.layout.resizeColWidth(colState.index, delta, contentWidth, totalColWeight)
-      // Update startX so next delta is relative to new position
       setResizingWorkspaceCol({ ...colState, startX: e.clientX })
       updateHandlePositions()
       return
@@ -259,16 +472,96 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
   }
 
   const handleMouseUp = () => {
+    const dragState = draggingWorkspace()
+    if (dragState) {
+      const preview = dropPreview()
+      if (preview && (preview.row !== dragState.startRow || preview.col !== dragState.startCol)) {
+        props.layout.moveWorkspace(dragState.id, preview.row, preview.col)
+      }
+      setDraggingWorkspace(null)
+      setDropPreview(null)
+    }
     setResizingWorkspaceRow(null)
     setResizingWorkspaceCol(null)
     updateHandlePositions()
+  }
+
+  // Workspace drag start
+  const handleWorkspaceDragStart = (e: MouseEvent, ws: typeof props.layout.layout.workspaces[0]) => {
+    if ((e.target as HTMLElement).closest('.workspace-actions') || (e.target as HTMLElement).closest('.workspace-content')) {
+      return
+    }
+    e.preventDefault()
+    setDraggingWorkspace({
+      id: ws.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      startRow: ws.position.row,
+      startCol: ws.position.col,
+      startRowSpan: ws.position.rowSpan,
+      startColSpan: ws.position.colSpan,
+    })
+  }
+
+  // Workspace resize handles (for rowSpan/colSpan)
+  const handleWorkspaceResizeStart = (e: MouseEvent, ws: typeof props.layout.layout.workspaces[0], type: 'row' | 'col' | 'corner') => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const startX = e.clientX
+    const startY = e.clientY
+    const startRow = ws.position.row
+    const startCol = ws.position.col
+    const startRowSpan = ws.position.rowSpan
+    const startColSpan = ws.position.colSpan
+
+    const onResizeMove = (moveEvent: MouseEvent) => {
+      const { rows, cols } = props.layout.layout.workspaceGrid
+
+      // Use pixel-accurate row/col calculation
+      const result = pixelsToGridPos(moveEvent.clientX, moveEvent.clientY, 1, 1)
+      if (!result) return
+
+      let newRowSpan = startRowSpan
+      let newColSpan = startColSpan
+
+      if (type === 'row' || type === 'corner') {
+        // Calculate new rowSpan based on which row the mouse is over
+        const targetRow = Math.min(result.row, rows - 1)
+        newRowSpan = Math.max(1, targetRow - startRow + 1)
+        newRowSpan = Math.min(newRowSpan, rows - startRow)
+      }
+
+      if (type === 'col' || type === 'corner') {
+        const targetCol = Math.min(result.col, cols - 1)
+        newColSpan = Math.max(1, targetCol - startCol + 1)
+        newColSpan = Math.min(newColSpan, cols - startCol)
+      }
+
+      // Check if new span would overlap
+      if (!wouldOverlap(startRow, startCol, newRowSpan, newColSpan, ws.id)) {
+        setDropPreview({ row: startRow, col: startCol, rowSpan: newRowSpan, colSpan: newColSpan })
+      }
+    }
+
+    const onResizeEnd = () => {
+      const preview = dropPreview()
+      if (preview) {
+        props.layout.resizeWorkspace(ws.id, preview.rowSpan, preview.colSpan)
+      }
+      document.removeEventListener('mousemove', onResizeMove)
+      document.removeEventListener('mouseup', onResizeEnd)
+      setDropPreview(null)
+    }
+
+    document.addEventListener('mousemove', onResizeMove)
+    document.addEventListener('mouseup', onResizeEnd)
   }
 
   onMount(() => {
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
     window.addEventListener('resize', handleWindowResize)
-    // Initial calculation after layout settles
     setTimeout(updateHandlePositions, 100)
   })
 
@@ -294,7 +587,6 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
   const workspaceGridStyle = () => {
     const { rowWeights, colWeights } = props.layout.layout.workspaceGrid
 
-    // Use fr units based on weights
     const gridTemplateRows = rowWeights.map(w => `${w}fr`).join(' ')
     const gridTemplateColumns = colWeights.map(w => `${w}fr`).join(' ')
 
@@ -439,11 +731,46 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
         {/* Workspaces */}
         <For each={props.layout.layout.workspaces}>
           {(workspace) => {
+            const isDragging = () => draggingWorkspace()?.id === workspace.id
+            const isPreview = () => {
+              const preview = dropPreview()
+              const drag = draggingWorkspace()
+              return preview && drag && drag.id === workspace.id
+            }
+
             return (
               <div
                 class="workspace-cell"
+                classList={{
+                  'ws-dragging': isDragging(),
+                  'ws-drop-preview': isPreview(),
+                }}
                 style={{ 'grid-area': getWorkspaceGridArea(workspace) }}
+                onMouseDown={(e) => handleWorkspaceDragStart(e, workspace)}
               >
+                {/* Resize handles - only show when not conflicting with grid line handles */}
+                <Show when={workspace.position.colSpan < props.layout.layout.workspaceGrid.cols && !hasGridLineHandleNear('right', workspace)}>
+                  <div
+                    class="ws-resize-handle ws-resize-right"
+                    onMouseDown={(e) => handleWorkspaceResizeStart(e, workspace, 'col')}
+                  />
+                </Show>
+                <Show when={workspace.position.rowSpan < props.layout.layout.workspaceGrid.rows && !hasGridLineHandleNear('bottom', workspace)}>
+                  <div
+                    class="ws-resize-handle ws-resize-bottom"
+                    onMouseDown={(e) => handleWorkspaceResizeStart(e, workspace, 'row')}
+                  />
+                </Show>
+                <Show when={
+                  (workspace.position.rowSpan < props.layout.layout.workspaceGrid.rows && !hasGridLineHandleNear('bottom', workspace)) &&
+                  (workspace.position.colSpan < props.layout.layout.workspaceGrid.cols && !hasGridLineHandleNear('right', workspace))
+                }>
+                  <div
+                    class="ws-resize-handle ws-resize-corner"
+                    onMouseDown={(e) => handleWorkspaceResizeStart(e, workspace, 'corner')}
+                  />
+                </Show>
+
                 <div class="workspace-header">
                   <div class="workspace-title">
                     <FolderIcon size={14} />
@@ -453,7 +780,10 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
                     <Show when={props.layout.layout.workspaces.length > 1}>
                       <button
                         class="workspace-action-btn"
-                        onClick={() => props.layout.removeWorkspace(workspace.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          props.layout.removeWorkspace(workspace.id)
+                        }}
                         title="Remove workspace"
                       >
                         <CloseIcon size={14} />
@@ -475,6 +805,18 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
             )
           }}
         </For>
+
+        {/* Drop preview overlay */}
+        <Show when={dropPreview()}>
+          {(preview) => (
+            <div
+              class="ws-drop-overlay"
+              style={{
+                'grid-area': `${preview().row + 1} / ${preview().col + 1} / span ${preview().rowSpan} / span ${preview().colSpan}`,
+              }}
+            />
+          )}
+        </Show>
       </div>
     </div>
   )
