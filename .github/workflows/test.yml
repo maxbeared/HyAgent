@@ -11,6 +11,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hybrid-agent/core test
         env:
@@ -24,6 +27,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hybrid-agent/core typecheck
 
@@ -35,6 +41,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hybrid-agent/core exec npx playwright install --with-deps
       - run: pnpm --filter @hybrid-agent/core test:e2e
