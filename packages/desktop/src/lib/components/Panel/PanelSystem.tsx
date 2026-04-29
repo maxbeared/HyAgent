@@ -351,30 +351,6 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
     return { row, col }
   }
 
-  // Check if a grid line handle exists nearby (to avoid conflict)
-  const hasGridLineHandleNear = (edge: 'right' | 'bottom', ws: typeof props.layout.layout.workspaces[0]) => {
-    const handlePos = handlePositions()
-    const { top, left, width, height } = gridPosToPixels(ws.position.row, ws.position.col, ws.position.rowSpan, ws.position.colSpan)
-    const threshold = 10 // px
-
-    if (edge === 'right') {
-      // Check if there's a col handle at the right edge of this workspace
-      for (const colX of handlePos.cols) {
-        if (Math.abs(colX - (left + width)) < threshold) {
-          return true
-        }
-      }
-    } else {
-      // Check if there's a row handle at the bottom edge of this workspace
-      for (const rowY of handlePos.rows) {
-        if (Math.abs(rowY - (top + height)) < threshold) {
-          return true
-        }
-      }
-    }
-    return false
-  }
-
   // Get current workspace position in grid coordinates
   const getWorkspaceGridPos = (ws: typeof props.layout.layout.workspaces[0]) => {
     return gridPosToPixels(ws.position.row, ws.position.col, ws.position.rowSpan, ws.position.colSpan)
@@ -748,23 +724,8 @@ const ProMode: Component<{ layout: ReturnType<typeof useLayout> }> = (props) => 
                 style={{ 'grid-area': getWorkspaceGridArea(workspace) }}
                 onMouseDown={(e) => handleWorkspaceDragStart(e, workspace)}
               >
-                {/* Resize handles - only show when not conflicting with grid line handles */}
-                <Show when={workspace.position.colSpan < props.layout.layout.workspaceGrid.cols && !hasGridLineHandleNear('right', workspace)}>
-                  <div
-                    class="ws-resize-handle ws-resize-right"
-                    onMouseDown={(e) => handleWorkspaceResizeStart(e, workspace, 'col')}
-                  />
-                </Show>
-                <Show when={workspace.position.rowSpan < props.layout.layout.workspaceGrid.rows && !hasGridLineHandleNear('bottom', workspace)}>
-                  <div
-                    class="ws-resize-handle ws-resize-bottom"
-                    onMouseDown={(e) => handleWorkspaceResizeStart(e, workspace, 'row')}
-                  />
-                </Show>
-                <Show when={
-                  (workspace.position.rowSpan < props.layout.layout.workspaceGrid.rows && !hasGridLineHandleNear('bottom', workspace)) &&
-                  (workspace.position.colSpan < props.layout.layout.workspaceGrid.cols && !hasGridLineHandleNear('right', workspace))
-                }>
+                {/* Resize handle - corner inside workspace, always show for shrinking */}
+                <Show when={true}>
                   <div
                     class="ws-resize-handle ws-resize-corner"
                     onMouseDown={(e) => handleWorkspaceResizeStart(e, workspace, 'corner')}

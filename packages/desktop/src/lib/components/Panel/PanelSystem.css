@@ -257,6 +257,7 @@
 .workspace-cell {
   display: flex;
   flex-direction: column;
+  position: relative;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   overflow: hidden;
@@ -378,39 +379,38 @@
   z-index: 5;
 }
 
-/* Workspace resize handles */
+/* Workspace resize handles - only corner, inside the workspace */
 .ws-resize-handle {
   position: absolute;
   z-index: 10;
 }
 
-.ws-resize-handle.ws-resize-right {
-  top: 0;
-  right: 0;
-  width: 8px;
-  height: 100%;
-  cursor: ew-resize;
-}
-
-.ws-resize-handle.ws-resize-bottom {
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 8px;
-  cursor: ns-resize;
-}
-
 .ws-resize-handle.ws-resize-corner {
   bottom: 0;
   right: 0;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   cursor: nwse-resize;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s;
 }
 
-.ws-resize-handle:hover {
-  background: var(--accent-primary);
-  opacity: 0.4;
+.ws-resize-handle.ws-resize-corner::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--accent-primary);
+  border-bottom: 2px solid var(--accent-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ws-resize-handle.ws-resize-corner:hover::after {
+  opacity: 0.7;
 }
 
 /* Panel Grid within workspace */
@@ -601,49 +601,29 @@
 .workspace-grid-handle.row-handle {
   left: 0;
   right: 0;
-  height: 6px;
-  margin-top: -3px;
+  height: 8px;
+  margin-top: -4px;
   cursor: ns-resize;
+  background: transparent;
 }
 
-.workspace-grid-handle.row-handle::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 2px;
-  height: 2px;
+.workspace-grid-handle.row-handle:hover {
   background: var(--accent-primary);
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.workspace-grid-handle.row-handle:hover::after {
-  opacity: 0.7;
+  opacity: 0.3;
 }
 
 .workspace-grid-handle.col-handle {
   top: 0;
   bottom: 0;
-  width: 6px;
-  margin-left: -3px;
+  width: 8px;
+  margin-left: -4px;
   cursor: ew-resize;
+  background: transparent;
 }
 
-.workspace-grid-handle.col-handle::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 2px;
-  width: 2px;
+.workspace-grid-handle.col-handle:hover {
   background: var(--accent-primary);
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.workspace-grid-handle.col-handle:hover::after {
-  opacity: 0.7;
+  opacity: 0.3;
 }
 
 /* Grid resize handles for panel grid */
